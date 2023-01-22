@@ -1,0 +1,45 @@
+# General params
+seed: 2023
+gpus: [0,1]
+
+# Params related to training
+train:
+  train_bs: 32 #Trainin batch size
+  val_bs: 16 #Validation batch size
+  lr: 1e-4 #Learning rate
+  epoch: 30
+
+# Params related to Performer models
+models:
+  num_tokens: 69
+  max_seq_len: 5000
+  dim: 512
+  depth: 6
+  heads: 12
+  dim_head: 64
+  local_attn_heads: 0
+  local_window_size: 256
+  causal: False
+  ff_mult: 4
+  nb_features: None
+  feature_redraw_interval: 1000
+  reversible: False
+  ff_chunks: 1
+  ff_glu: False
+  emb_dropout: 0.
+  ff_dropout: 0.
+  attn_dropout: 0.
+  generalized_attention: False
+  kernel_fn: nn.ReLU()
+  use_scalenorm: False
+  use_rezero: False
+  cross_attend: False
+  no_projection: False
+  tie_embed: False
+  rotary_position_emb: True
+  axial_position_emb: False
+  axial_position_shape: None
+  auto_check_redraw: True
+  qkv_bias: False
+  attn_out_bias: False
+  shift_tokens: False
