@@ -98,6 +98,12 @@ def train(
         val_dataset, batch_size=cfg.train.val_bs, shuffle=False, num_workers=2
     )
 
+    for epoch in range(cfg.epoch):
+        model.train()
+        running_loss = 0.0
+        for data, labels in train_dataloader:
+            data, labels = data.to(device), labels.to(device)
+
 
 if __name__ == "__main__":
 
