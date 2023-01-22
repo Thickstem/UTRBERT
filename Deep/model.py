@@ -1,6 +1,44 @@
-import torch
+import math
 import torch.nn as nn
-from performer_pytorch.performer_pytorch import Performer
+from performer_pytorch.performer_pytorch import (
+    Performer,
+    FixedPositionalEmbedding,
+    AxialPositionalEmbedding,
+    AbsolutePositionalEmbedding,
+    Always,
+    cast_tuple,
+    default,
+    exists)
+
+SEQ_LEN=5000
+
+class OutLayer(nn.Module): # Extracted from scBERT repository "Identity"
+    def __init__(self,main_dim, dropout = 0., h_dim = 100, out_dim = 1):
+        super(OutLayer, self).__init__()
+        self.conv1 = nn.Conv2d(1, 1, (1, main_dim))
+        self.act = nn.ReLU()
+        self.fc1 = nn.Linear(in_features=SEQ_LEN, out_features=512, bias=True)
+        self.act1 = nn.ReLU()
+        self.dropout1 = nn.Dropout(dropout)
+        self.fc2 = nn.Linear(in_features=512, out_features=h_dim, bias=True)
+        self.act2 = nn.ReLU()
+        self.dropout2 = nn.Dropout(dropout)
+        self.fc3 = nn.Linear(in_features=h_dim, out_features=out_dim, bias=True)
+
+    def forward(self, x):
+        x = x[:,None,:,:]
+        x = self.conv1(x)
+        x = self.act(x)
+        x = x.view(x.shape[0],-1)
+        x = self.fc1(x)
+        x = self.act1(x)
+        x = self.dropout1(x)
+        x = self.fc2(x)
+        x = self.act2(x)
+        x = self.dropout2(x)
+        x = self.fc3(x)
+        return x
+
 
 class PerformerModel:
     def __init__(
