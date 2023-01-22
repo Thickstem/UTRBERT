@@ -8,7 +8,6 @@ import math
 import random
 from functools import reduce
 import numpy as np
-import pandas as pd
 
 from sklearn.model_selection import train_test_split, ShuffleSplit, StratifiedShuffleSplit, StratifiedKFold
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, precision_recall_fscore_support, classification_report
@@ -26,3 +25,13 @@ from tokenizer import DNATokenizer
 from dataset import UTRData
 from model import PerformerModel
 
+def _argparse():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--main_dim","required")
+
+    args = parser.parse_args()
+    return args
+
+
+if __name__=="__main__":
+    args = _argparse()
