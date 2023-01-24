@@ -19,19 +19,19 @@ def match(seq_db: pd.DataFrame, TE_data: pd.DataFrame):
     TE_data_ids = TE_data["ensembl_tx_id"].values
     matched_id = set(seq_db_ids) & set(TE_data_ids)
 
-    seq_db_ids = seq_db_ids.set_index("trans_id").loc[matched_id]
-    te_value = TE_data_ids.set_index("ensembl_tx_id").loc[matched_id]["te"]
+    seq_db = seq_db.set_index("trans_id").loc[matched_id]
+    te_value = TE_data.set_index("ensembl_tx_id").loc[matched_id]["te"]
 
-    seq_db_ids["te"] = te_value
+    seq_db["te"] = te_value
 
-    return seq_db_ids
+    return seq_db
 
 
 if __name__ == "__main__":
     args = _argparse()
 
     seq_db = pd.read_csv(args.sequence_db, index_col=0)
-    TE_data = pd.read_csv(args.te_data, index_col=0)
+    TE_data = pd.read_table(args.te_data, sep=" ")
     TE_data = TE_data[TE_data.isnull().sum(axis=1) == 0]
 
     matched_df = match(seq_db, TE_data)
