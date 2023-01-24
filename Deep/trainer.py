@@ -11,20 +11,9 @@ import random
 from functools import reduce
 import numpy as np
 import pandas as pd
+import wandb
+from sklearn.model_selection import train_test_split
 
-from sklearn.model_selection import (
-    train_test_split,
-    ShuffleSplit,
-    StratifiedShuffleSplit,
-    StratifiedKFold,
-)
-from sklearn.metrics import (
-    accuracy_score,
-    f1_score,
-    confusion_matrix,
-    precision_recall_fscore_support,
-    classification_report,
-)
 import torch
 from torch import nn
 from torch.optim import Adam, SGD, AdamW
@@ -39,6 +28,7 @@ import torch.distributed as dist
 from tokenizer import DNATokenizer
 from dataset import UTRDataset
 from model import PerformerModel
+from utils import metrics
 
 
 def _argparse() -> argparse.Namespace:
@@ -90,16 +80,26 @@ def val(cfg: yaml, model: nn.Module, val_dataset: Dataset):
         val_dataset, batch_size=cfg.train.val_bs, shuffle=False, num_workers=2
     )
     model.eval()
+    eval_steps = 0
     for data, labels in val_dataloader:
+        eval_steps += 1
         data, labels = data.to(device), labels.to(device)
 
         logits = model(data)
         loss = MSELoss(logits, labels)
         running_loss += loss.item()
+        if preds is None:
+            preds = logits.detach().cpu().numpy()
+            out_labels = labels.detach().cpu().numpy()
+        else:
+            preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
+            out_labels = np.append(out_labels, labels.detach().cpu().numpy(), axis=0)
 
-    eval_loss = running_loss // len(val_dataloader)
+    eval_loss = running_loss // eval_steps
+    scores = metrics(preds, out_labels)
+    scores["loss"] = eval_loss
 
-    return eval_loss
+    return scores
 
 
 def train(
@@ -113,11 +113,21 @@ def train(
     train_dataloader = DataLoader(
         train_dataset, batch_size=cfg.train_bs, shuffle=True, num_workers=2
     )
+    scheduler = CosineAnnealingWarmRestarts(
+        optimizer,
+        first_cycle_steps=15,
+        cycle_mult=2,
+        max_lr=cfg.lr,
+        min_lr=1e-6,
+        warmup_steps=5,
+        gamma=0.9,
+    )
 
     for epoch in range(cfg.epoch):
         model.train()
         running_loss = 0.0
-        for step, (data, labels) in enumerate(train_dataloader):
+        train_steps = 0
+        for data, labels in train_dataloader:
             data, labels = data.to(device), labels.to(device)
 
             logits = model(data)
@@ -129,24 +139,36 @@ def train(
 
             loss.backward()
 
-            if (step + 1) // cfg.grad_acc == 0:
+            if (train_steps + 1) // cfg.grad_acc == 0:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), int(1e6))
                 optimizer.step()
                 optimizer.zero_grad()
 
             running_loss += loss.item()
+            train_steps += 1
 
-        epoch_loss = running_loss / len(train_dataloader)
+        epoch_loss = running_loss / train_steps
+        scheduler.step()
         model.zero_grad()
+        wandb.log({"train_loss": epoch_loss}, step=epoch)
 
         if epoch % cfg.val_epoch == 0:
-            eval_loss = val(cfg, model, val_dataset)
+            scores = val(cfg, model, val_dataset)
+            for key, val in scores.items():
+                wandb.log({key: val}, step=epoch)
+
+    torch.save(model.module.state_dict(), cfg.result_dir)
 
 
 if __name__ == "__main__":
 
     args = _argparse()
     cfg = _parse_config(args.cfg_path)
+    wandb.init(
+        name=f"{os.path.basename(cfg.result_dir)}", project="mrna_full", config=cfg
+    )
+
+    os.makedirs(cfg.result_dir, exist_ok=True)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     num_gpu = len(cfg.gpus)
 
@@ -166,3 +188,5 @@ if __name__ == "__main__":
 
     # optimizer
     optimizer = Adam(model.parameters(), lr=cfg.train.lr)
+
+    train(cfg, model, train_dataset, val_dataset, optimizer)
