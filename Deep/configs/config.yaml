@@ -8,6 +8,17 @@ train:
   val_bs: 16 #Validation batch size
   lr: 1e-4 #Learning rate
   epoch: 30
+  val_epoch: 5
+  grad_acc: 1
+
+# Params related to building dataset
+dataset:
+  vocab_file: configs/vocab.txt
+  max_length: 5000
+  pad_on_left: False
+  pad_token: 0
+  pad_token_segment_id: 0
+  mask_padding_with_zero: True
 
 # Params related to Performer models
 models:

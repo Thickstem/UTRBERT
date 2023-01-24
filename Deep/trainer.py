@@ -5,7 +5,7 @@ import argparse
 import json
 import random
 import math
-from typing import Tuple, List, Union
+from typing import Tuple, Union
 import yaml
 import random
 from functools import reduce
@@ -70,7 +70,7 @@ def _parse_config(cfg_path: str) -> dict:
     return config
 
 
-def load_data(data_path: str) -> Tuple[List, List]:
+def load_data(data_path: str) -> Tuple[list, list]:
     """
     Args:
         data_path (str): path to csv file
@@ -84,6 +84,24 @@ def load_data(data_path: str) -> Tuple[List, List]:
     return (data, label)
 
 
+def val(cfg: yaml, model: nn.Module, val_dataset: Dataset):
+
+    val_dataloader = DataLoader(
+        val_dataset, batch_size=cfg.train.val_bs, shuffle=False, num_workers=2
+    )
+    model.eval()
+    for data, labels in val_dataloader:
+        data, labels = data.to(device), labels.to(device)
+
+        logits = model(data)
+        loss = MSELoss(logits, labels)
+        running_loss += loss.item()
+
+    eval_loss = running_loss // len(val_dataloader)
+
+    return eval_loss
+
+
 def train(
     cfg: yaml,
     model: nn.Module,
@@ -91,18 +109,38 @@ def train(
     val_dataset: Dataset,
     optimizer: torch.optim,
 ) -> None:
+    cfg = cfg.train
     train_dataloader = DataLoader(
-        train_dataset, batch_size=cfg.train.train_bs, shuffle=True, num_workers=2
-    )
-    val_dataloader = DataLoader(
-        val_dataset, batch_size=cfg.train.val_bs, shuffle=False, num_workers=2
+        train_dataset, batch_size=cfg.train_bs, shuffle=True, num_workers=2
     )
 
     for epoch in range(cfg.epoch):
         model.train()
         running_loss = 0.0
-        for data, labels in train_dataloader:
+        for step, (data, labels) in enumerate(train_dataloader):
             data, labels = data.to(device), labels.to(device)
+
+            logits = model(data)
+            loss = MSELoss(logits, label)
+            if len(cfg.gpus) > 1:
+                loss = loss.mean()
+            if cfg.grad_acc > 1:
+                loss = loss / cfg.grad_acc
+
+            loss.backward()
+
+            if (step + 1) // cfg.grad_acc == 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), int(1e6))
+                optimizer.step()
+                optimizer.zero_grad()
+
+            running_loss += loss.item()
+
+        epoch_loss = running_loss / len(train_dataloader)
+        model.zero_grad()
+
+        if epoch % cfg.val_epoch == 0:
+            eval_loss = val(cfg, model, val_dataset)
 
 
 if __name__ == "__main__":
@@ -112,12 +150,14 @@ if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
     num_gpu = len(cfg.gpus)
 
+    tokenizer = DNATokenizer(vocab_file=cfg.vocab_file)
+
     data, label = load_data(args.data_path)
     train_data, val_data, train_label, val_label = train_test_split(
         data, label, test_size=0.2, random_state=cfg.seed
     )
-    train_dataset = UTRDataset(train_data, train_label)
-    val_dataset = UTRDataset(val_data, val_label)
+    train_dataset = UTRDataset(cfg, train_data, train_label, tokenizer)
+    val_dataset = UTRDataset(cfg, val_data, val_label, tokenizer)
 
     model = PerformerModel(cfg.models)
     model.to(device)
