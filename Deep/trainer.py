@@ -5,6 +5,7 @@ import argparse
 import json
 import random
 import math
+from attrdict import AttrDict
 from typing import Tuple, Union
 import yaml
 import random
@@ -55,7 +56,7 @@ def _parse_config(cfg_path: str) -> dict:
 
     with open(cfg_path) as f:
         config = yaml.safe_load(f.read())
-
+    config = AttrDict(config)
     return config
 
 
@@ -163,6 +164,7 @@ if __name__ == "__main__":
 
     args = _argparse()
     cfg = _parse_config(args.cfg)
+    print(cfg)
     wandb.init(
         name=f"{os.path.basename(cfg.result_dir)}", project="mrna_full", config=cfg
     )
@@ -171,7 +173,9 @@ if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
     num_gpu = len(cfg.gpus)
 
-    tokenizer = DNATokenizer(vocab_file=cfg.vocab_file)
+    tokenizer = DNATokenizer(
+        vocab_file=cfg.dataset.vocab_file, max_len=cfg.dataset.max_length
+    )
 
     data, label = load_data(cfg.data)
     train_data, val_data, train_label, val_label = train_test_split(
