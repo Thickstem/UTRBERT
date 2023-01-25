@@ -1,5 +1,6 @@
 # General params
 result_dir: mrna_full_basic
+data_dir: ../data
 data: ../data/mrna_full_hek.csv # path to raw data csv
 seed: 2023
 gpus: [0,1]

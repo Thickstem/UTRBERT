@@ -1,6 +1,9 @@
 import os
 import json
 import copy
+import logging
+from logging import StreamHandler, Formatter
+from tqdm import tqdm
 import numpy as np
 from sklearn import preprocessing
 import torch
@@ -8,47 +11,70 @@ from torch.utils.data import Dataset
 
 
 def create_input_features(
+    cfg,
     samples,
     labels,
     tokenizer,
-    max_length=5000,
+    max_length,
     pad_on_left=False,
     pad_token=0,
     pad_token_segment_id=0,
     mask_padding_with_zero=True,
 ):
+    cached_feature_file = os.path.join(
+        cfg.data_dir,
+        "cached_{}_{}.pt".format(
+            os.path.basename(cfg.data).split(".")[0], cfg.dataset.max_length
+        ),
+    )
+    if os.path.exists(cached_feature_file):
+        features = torch.load(cached_feature_file)
 
-    features = []
-    for sample, label in zip(samples, labels):
-        tokens = tokenizer.encode_plus(sample, add_special_tokens=True)
-        input_ids, attention_mask, token_type_ids = (
-            tokens["input_ids"],
-            tokens["attention_mask"],
-            tokens["token_type_ids"],
-        )
-        padding_length = max_length - len(input_ids)
-
-        if pad_on_left:
-            input_ids = ([pad_token] * padding_length) + input_ids
-            attention_mask = (
-                [0 if mask_padding_with_zero else 1] * padding_length
-            ) + attention_mask
-            token_type_ids = ([pad_token_segment_id] * padding_length) + token_type_ids
-        else:
-            input_ids = input_ids + ([pad_token] * padding_length)
-            attention_mask = attention_mask + (
-                [0 if mask_padding_with_zero else 1] * padding_length
+    else:
+        features = []
+        for i, (sample, label) in tqdm(
+            enumerate(zip(samples, labels)), desc="Creating features..."
+        ):
+            sample = " ".join(
+                sample
+            )  # convert ["fiveprime","cds","threeprime"]→ ["fiveprime cds threeprime"]
+            tokens = tokenizer.encode_plus(
+                sample,
+                add_special_tokens=True,
             )
-            token_type_ids = token_type_ids + ([pad_token_segment_id] * padding_length)
-
-        features.append(
-            InputFeatures(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                token_type_ids=token_type_ids,
-                label=label,
+            input_ids, attention_mask, token_type_ids = (
+                tokens["input_ids"],
+                tokens["attention_mask"],
+                tokens["token_type_ids"],
             )
-        )
+            padding_length = max_length - len(input_ids)
+
+            if pad_on_left:
+                input_ids = ([pad_token] * padding_length) + input_ids
+                attention_mask = (
+                    [0 if mask_padding_with_zero else 1] * padding_length
+                ) + attention_mask
+                token_type_ids = (
+                    [pad_token_segment_id] * padding_length
+                ) + token_type_ids
+            else:
+                input_ids = input_ids + ([pad_token] * padding_length)
+                attention_mask = attention_mask + (
+                    [0 if mask_padding_with_zero else 1] * padding_length
+                )
+                token_type_ids = token_type_ids + (
+                    [pad_token_segment_id] * padding_length
+                )
+
+            features.append(
+                InputFeatures(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    token_type_ids=token_type_ids,
+                    label=label,
+                )
+            )
+        torch.save(features, cached_feature_file)
 
     return features
 
@@ -91,15 +117,16 @@ class UTRDataset(Dataset):
         super().__init__()
         self.data = data
         self.label = label
-        self.feature = create_input_features(
+        self.features = create_input_features(
+            cfg,
             self.data,
             self.label,
             tokenizer,
-            max_length=5000,
-            pad_on_left=False,
-            pad_token=0,
-            pad_token_segment_id=0,
-            mask_padding_with_zero=True,
+            max_length=cfg.dataset.max_length + 2,
+            pad_on_left=cfg.dataset.pad_on_left,
+            pad_token=cfg.dataset.pad_token,
+            pad_token_segment_id=cfg.dataset.pad_token_segment_id,
+            mask_padding_with_zero=cfg.dataset.mask_padding_with_zero,
         )
         self.all_input_ids = torch.tensor(
             [f.input_ids for f in self.features], dtype=torch.long

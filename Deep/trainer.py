@@ -166,7 +166,7 @@ if __name__ == "__main__":
     cfg = _parse_config(args.cfg)
     print(cfg)
     wandb.init(
-        name=f"{os.path.basename(cfg.result_dir)}", project="mrna_full", config=cfg
+        name=f"{os.path.basename(cfg.result_dir)}", project="mrna_full_dev", config=cfg
     )
 
     os.makedirs(cfg.result_dir, exist_ok=True)
@@ -175,7 +175,7 @@ if __name__ == "__main__":
 
     tokenizer = DNATokenizer(
         vocab_file=cfg.dataset.vocab_file, max_len=cfg.dataset.max_length
-    )
+    )  # for [CLS],[SEP] tokens
 
     data, label = load_data(cfg.data)
     train_data, val_data, train_label, val_label = train_test_split(
