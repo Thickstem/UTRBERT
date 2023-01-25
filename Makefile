@@ -8,9 +8,8 @@ build:
 
 start:
 	docker run --gpus all --shm-size=${SHM_SIZE} --rm -it --name ${IMAGE_NAME}-${USER}-${NOW} \
-						-v ${PWD}:/opt/jlp_maker \
-						-v ${DATA}:/data \
-						${IMAGE_NAME} sh -c "cd /opt/jlp_maker && bash"
+						-v ${PWD}:/opt/utrbert\
+						${IMAGE_NAME} sh -c "cd /opt/utrbert && bash"
 
 
 
