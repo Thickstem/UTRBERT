@@ -38,7 +38,6 @@ def _argparse() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser()
     parser.add_argument("--cfg", required=True, type=str, help="config file path")
-    parser.add_argument("--data", required=True, type=str, help="path to csv file data")
     args = parser.parse_args()
 
     return args
@@ -69,8 +68,8 @@ def load_data(data_path: str) -> Tuple[list, list]:
         Tuple[List, List]: Each list of [data,label]
     """
     full_data = pd.read_csv(data_path, index_col=0)
-    data = full_data.loc[:, ["5UTR", "CDS", "3UTR"]].values
-    label = full_data["label"].values
+    data = full_data.loc[:, ["fiveprime", "cds", "threeprime"]].values
+    label = full_data["te"].values
     return (data, label)
 
 
@@ -163,7 +162,7 @@ def train(
 if __name__ == "__main__":
 
     args = _argparse()
-    cfg = _parse_config(args.cfg_path)
+    cfg = _parse_config(args.cfg)
     wandb.init(
         name=f"{os.path.basename(cfg.result_dir)}", project="mrna_full", config=cfg
     )
@@ -174,7 +173,7 @@ if __name__ == "__main__":
 
     tokenizer = DNATokenizer(vocab_file=cfg.vocab_file)
 
-    data, label = load_data(args.data_path)
+    data, label = load_data(cfg.data)
     train_data, val_data, train_label, val_label = train_test_split(
         data, label, test_size=0.2, random_state=cfg.seed
     )
