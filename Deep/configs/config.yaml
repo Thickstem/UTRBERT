@@ -26,7 +26,7 @@ dataset:
 # Params related to Performer models
 models:
   num_tokens: 69
-  max_seq_len: 5000
+  max_seq_len: 5002
   dim: 768
   depth: 2
   heads: 12

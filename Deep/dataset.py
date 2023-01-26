@@ -135,11 +135,14 @@ class UTRDataset(Dataset):
             [f.input_ids for f in self.features], dtype=torch.long
         )
         self.all_attention_mask = torch.tensor(
-            [f.attention_mask for f in self.features], dtype=torch.long
+            [f.attention_mask for f in self.features],
+            dtype=torch.bool,  # for performer input
         )
+        """
         self.all_token_type_ids = torch.tensor(
             [f.token_type_ids for f in self.features], dtype=torch.long
         )
+        """
 
         all_labels = np.array([f.label for f in self.features], dtype=float)
         all_labels = (
@@ -154,7 +157,7 @@ class UTRDataset(Dataset):
         inputs = (
             self.all_input_ids[index],
             self.all_attention_mask[index],
-            self.all_token_type_ids[index],
+            # self.all_token_type_ids[index],
         )
         return inputs, self.all_labels[index]
 

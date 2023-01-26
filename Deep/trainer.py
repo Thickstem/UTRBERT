@@ -11,6 +11,7 @@ from typing import Tuple, Union
 import yaml
 import random
 from functools import reduce
+from tqdm import tqdm
 import numpy as np
 import pandas as pd
 import wandb
@@ -114,22 +115,27 @@ def train(
     val_dataset: Dataset,
     optimizer: torch.optim,
 ) -> None:
+    cfg_gen = cfg
     cfg = cfg.train
     train_dataloader = DataLoader(
         train_dataset, batch_size=cfg.train_bs, shuffle=True, num_workers=2
     )
     scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-6)
+    loss_fn = nn.MSELoss()
 
     for epoch in range(cfg.epoch):
         model.train()
         running_loss = 0.0
         train_steps = 0
-        for data, labels in train_dataloader:
-            data, labels = data.to(device), labels.to(device)
+        for data, labels in tqdm(train_dataloader, desc=f"Epoch {epoch}:"):
+            data = tuple(d.to(device) for d in data)  # [input_ids,attention_masks]
+            labels = labels.to(device)
 
-            logits = model(data)
-            loss = MSELoss(logits, label)
-            if len(cfg.gpus) > 1:
+            logits = model(data[0], mask=data[1])
+            print(f"logits:{logits.view(-1)}")
+            print(f"labels:{labels}")
+            loss = loss_fn(logits.view(-1), labels)
+            if len(cfg_gen.gpus) > 1:
                 loss = loss.mean()
             if cfg.grad_acc > 1:
                 loss = loss / cfg.grad_acc
@@ -168,11 +174,10 @@ if __name__ == "__main__":
     config.dictConfig(log_conf)
     logger = getLogger("Log")
     logger.info(cfg)
-    """
+
     wandb.init(
-        name=f"{os.path.basename(cfg.result_dir)}", project="mrna_full_dev", config=cfg
+        name=f"{os.path.basename(cfg.result_dir)}", project="mrna_full", config=cfg
     )
-    """
 
     os.makedirs(cfg.result_dir, exist_ok=True)
     device = "cuda" if torch.cuda.is_available() else "cpu"
