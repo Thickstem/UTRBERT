@@ -1,13 +1,15 @@
 import os
 import json
 import copy
-import logging
-from logging import StreamHandler, Formatter
+from logging import getLogger
 from tqdm import tqdm
 import numpy as np
 from sklearn import preprocessing
 import torch
 from torch.utils.data import Dataset
+
+
+logger = getLogger(__name__).getChild("dataset")
 
 
 def create_input_features(
@@ -28,6 +30,7 @@ def create_input_features(
         ),
     )
     if os.path.exists(cached_feature_file):
+        logger.info("Loading cached dataset ...")
         features = torch.load(cached_feature_file)
 
     else:

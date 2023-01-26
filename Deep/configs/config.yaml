@@ -27,8 +27,8 @@ dataset:
 models:
   num_tokens: 69
   max_seq_len: 5000
-  dim: 512
-  depth: 6
+  dim: 768
+  depth: 2
   heads: 12
   dim_head: 64
   local_attn_heads: 0

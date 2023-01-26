@@ -5,6 +5,7 @@ import argparse
 import json
 import random
 import math
+from logging import getLogger, config
 from attrdict import AttrDict
 from typing import Tuple, Union
 import yaml
@@ -39,6 +40,7 @@ def _argparse() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser()
     parser.add_argument("--cfg", required=True, type=str, help="config file path")
+    parser.add_argument("--logger_cfg", default="./configs/log_config.json")
     args = parser.parse_args()
 
     return args
@@ -163,8 +165,15 @@ def train(
 if __name__ == "__main__":
 
     args = _argparse()
+
+    # Setting logger
+    with open(args.logger_cfg, "r") as f:
+        log_conf = json.load(f)
+    config.dictConfig(log_conf)
+    logger = getLogger(__name__)
+
     cfg = _parse_config(args.cfg)
-    print(cfg)
+    logger.info(cfg)
     wandb.init(
         name=f"{os.path.basename(cfg.result_dir)}", project="mrna_full_dev", config=cfg
     )
