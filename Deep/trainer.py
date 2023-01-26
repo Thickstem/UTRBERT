@@ -132,8 +132,6 @@ def train(
             labels = labels.to(device)
 
             logits = model(data[0], mask=data[1])
-            print(f"logits:{logits.view(-1)}")
-            print(f"labels:{labels}")
             loss = loss_fn(logits.view(-1), labels)
             if len(cfg_gen.gpus) > 1:
                 loss = loss.mean()
@@ -154,11 +152,12 @@ def train(
         scheduler.step()
         model.zero_grad()
         wandb.log({"train_loss": epoch_loss}, step=epoch)
-
+        """
         if epoch % cfg.val_epoch == 0:
             scores = val(cfg, model, val_dataset)
             for key, val in scores.items():
                 wandb.log({key: val}, step=epoch)
+        """
 
     torch.save(model.module.state_dict(), cfg.result_dir)
 
