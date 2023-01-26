@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 import wandb
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 
 import torch
 from torch import nn
@@ -98,6 +99,8 @@ def val(cfg: yaml, model: nn.Module, val_dataset: Dataset):
             out_labels = np.append(out_labels, labels.detach().cpu().numpy(), axis=0)
 
     eval_loss = running_loss // eval_steps
+    scaler = StandardScaler().fit(preds.reshape(-1, 1))
+    preds = scaler.inverse_transform(preds).reshape(-1)
     scores = metrics(preds, out_labels)
     scores["loss"] = eval_loss
 
@@ -115,15 +118,7 @@ def train(
     train_dataloader = DataLoader(
         train_dataset, batch_size=cfg.train_bs, shuffle=True, num_workers=2
     )
-    scheduler = CosineAnnealingWarmRestarts(
-        optimizer,
-        first_cycle_steps=15,
-        cycle_mult=2,
-        max_lr=cfg.lr,
-        min_lr=1e-6,
-        warmup_steps=5,
-        gamma=0.9,
-    )
+    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-6)
 
     for epoch in range(cfg.epoch):
         model.train()
@@ -165,18 +160,19 @@ def train(
 if __name__ == "__main__":
 
     args = _argparse()
+    cfg = _parse_config(args.cfg)
 
     # Setting logger
     with open(args.logger_cfg, "r") as f:
         log_conf = json.load(f)
     config.dictConfig(log_conf)
-    logger = getLogger(__name__)
-
-    cfg = _parse_config(args.cfg)
+    logger = getLogger("Log")
     logger.info(cfg)
+    """
     wandb.init(
         name=f"{os.path.basename(cfg.result_dir)}", project="mrna_full_dev", config=cfg
     )
+    """
 
     os.makedirs(cfg.result_dir, exist_ok=True)
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -186,11 +182,15 @@ if __name__ == "__main__":
         vocab_file=cfg.dataset.vocab_file, max_len=cfg.dataset.max_length
     )  # for [CLS],[SEP] tokens
 
+    logger.info(f"loading data from {cfg.data}")
     data, label = load_data(cfg.data)
     train_data, val_data, train_label, val_label = train_test_split(
         data, label, test_size=0.2, random_state=cfg.seed
     )
+
+    logger.info("Creating train dataset ...")
     train_dataset = UTRDataset(cfg, train_data, train_label, tokenizer)
+    logger.info("Creating val dataset...")
     val_dataset = UTRDataset(cfg, val_data, val_label, tokenizer)
 
     model = PerformerModel(cfg.models)
@@ -199,6 +199,6 @@ if __name__ == "__main__":
         model = DP(model)
 
     # optimizer
-    optimizer = Adam(model.parameters(), lr=cfg.train.lr)
+    optimizer = Adam(model.parameters(), lr=float(cfg.train.lr))
 
     train(cfg, model, train_dataset, val_dataset, optimizer)

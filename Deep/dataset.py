@@ -9,7 +9,7 @@ import torch
 from torch.utils.data import Dataset
 
 
-logger = getLogger(__name__).getChild("dataset")
+logger = getLogger("Log").getChild("dataset")
 
 
 def create_input_features(
