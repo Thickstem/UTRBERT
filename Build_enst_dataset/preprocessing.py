@@ -56,5 +56,6 @@ if __name__ == "__main__":
 
     matched_df = match(seq_db, TE_data)
     matched_df = mernize(matched_df)
-    matched_df = cut_higer_te(matched_df)
+    # matched_df = cut_higer_te(matched_df)
+    matched_df["te"] = np.log(matched_df["te"].values)  # log convertion
     matched_df.to_csv(os.path.join("../data/", args.save))
