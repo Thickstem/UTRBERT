@@ -14,6 +14,7 @@ logger = getLogger("Log").getChild("dataset")
 
 def create_input_features(
     cfg,
+    phase,
     samples,
     labels,
     tokenizer,
@@ -25,8 +26,8 @@ def create_input_features(
 ):
     cached_feature_file = os.path.join(
         cfg.data_dir,
-        "cached_{}_{}.pt".format(
-            os.path.basename(cfg.data).split(".")[0], cfg.dataset.max_length
+        "cached_{}_{}_{}.pt".format(
+            os.path.basename(cfg.data).split(".")[0], cfg.dataset.max_length, phase
         ),
     )
     if os.path.exists(cached_feature_file):
@@ -115,13 +116,15 @@ class InputFeatures(object):
 
 
 class UTRDataset(Dataset):
-    def __init__(self, cfg, data, label, tokenizer):
+    def __init__(self, cfg, data, label, tokenizer, phase="train"):
         "Input format should be id-converted sequences"
         super().__init__()
         self.data = data
         self.label = label
+        self.phase = phase
         self.features = create_input_features(
             cfg,
+            self.phase,
             self.data,
             self.label,
             tokenizer,
@@ -138,13 +141,10 @@ class UTRDataset(Dataset):
             [f.attention_mask for f in self.features],
             dtype=torch.bool,  # for performer input
         )
-        """
-        self.all_token_type_ids = torch.tensor(
-            [f.token_type_ids for f in self.features], dtype=torch.long
-        )
-        """
 
         all_labels = np.array([f.label for f in self.features], dtype=float)
+        if phase == "val":
+            self.scaler = preprocessing.StandardScaler().fit(all_labels.reshape(-1, 1))
         all_labels = (
             preprocessing.StandardScaler()
             .fit_transform(all_labels.reshape(-1, 1))

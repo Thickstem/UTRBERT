@@ -78,20 +78,36 @@ def load_data(data_path: str) -> Tuple[list, list]:
     return (data, label)
 
 
-def val(cfg: yaml, model: nn.Module, val_dataset: Dataset):
+def validation(cfg: yaml, model: nn.Module, val_dataset: Dataset):
+    """
 
+    Args:
+        cfg (yaml): cfg.train
+        model (nn.Module): _description_
+        val_dataset (Dataset): _description_
+
+    Returns:
+        _type_: _description_
+    """
     val_dataloader = DataLoader(
         val_dataset, batch_size=cfg.train.val_bs, shuffle=False, num_workers=2
     )
+    loss_fn = MSELoss()
     model.eval()
+    running_loss = 0
     eval_steps = 0
+    preds = None
     for data, labels in val_dataloader:
         eval_steps += 1
-        data, labels = data.to(device), labels.to(device)
+        data = tuple(d.to(device) for d in data)  # [input_ids,attention_masks]
+        labels = labels.to(device)
 
-        logits = model(data)
-        loss = MSELoss(logits, labels)
+        logits = model(data[0], mask=data[1])
+        loss = loss_fn(logits.view(-1), labels)
+        if len(cfg.gpus) > 1:
+            loss = loss.mean()
         running_loss += loss.item()
+
         if preds is None:
             preds = logits.detach().cpu().numpy()
             out_labels = labels.detach().cpu().numpy()
@@ -99,9 +115,11 @@ def val(cfg: yaml, model: nn.Module, val_dataset: Dataset):
             preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
             out_labels = np.append(out_labels, labels.detach().cpu().numpy(), axis=0)
 
-    eval_loss = running_loss // eval_steps
-    scaler = StandardScaler().fit(preds.reshape(-1, 1))
-    preds = scaler.inverse_transform(preds).reshape(-1)
+    eval_loss = running_loss / eval_steps
+    preds = val_dataset.scaler.inverse_transform(preds).reshape(-1)
+    out_labels = val_dataset.scaler.inverse_transform(
+        out_labels.reshape(-1, 1)
+    ).reshape(-1)
     scores = metrics(preds, out_labels)
     scores["loss"] = eval_loss
 
@@ -115,49 +133,49 @@ def train(
     val_dataset: Dataset,
     optimizer: torch.optim,
 ) -> None:
-    cfg_gen = cfg
-    cfg = cfg.train
     train_dataloader = DataLoader(
-        train_dataset, batch_size=cfg.train_bs, shuffle=True, num_workers=2
+        train_dataset, batch_size=cfg.train.train_bs, shuffle=True, num_workers=2
     )
     scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-6)
     loss_fn = nn.MSELoss()
 
-    for epoch in range(cfg.epoch):
+    for epoch in range(cfg.train.epoch):
         model.train()
         running_loss = 0.0
         train_steps = 0
-        for data, labels in tqdm(train_dataloader, desc=f"Epoch {epoch}:"):
+        for data, labels in tqdm(train_dataloader, desc=f"Epoch {epoch}"):
             data = tuple(d.to(device) for d in data)  # [input_ids,attention_masks]
             labels = labels.to(device)
 
             logits = model(data[0], mask=data[1])
             loss = loss_fn(logits.view(-1), labels)
-            if len(cfg_gen.gpus) > 1:
+            if len(cfg.gpus) > 1:
                 loss = loss.mean()
-            if cfg.grad_acc > 1:
-                loss = loss / cfg.grad_acc
+            if cfg.train.grad_acc > 1:
+                loss = loss / cfg.train.grad_acc
 
             loss.backward()
 
-            if (train_steps + 1) // cfg.grad_acc == 0:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), int(1e6))
+            if (train_steps + 1) % cfg.train.grad_acc == 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
                 optimizer.step()
+                scheduler.step()
                 optimizer.zero_grad()
 
             running_loss += loss.item()
             train_steps += 1
 
         epoch_loss = running_loss / train_steps
-        scheduler.step()
-        model.zero_grad()
-        wandb.log({"train_loss": epoch_loss}, step=epoch)
-        """
-        if epoch % cfg.val_epoch == 0:
-            scores = val(cfg, model, val_dataset)
-            for key, val in scores.items():
-                wandb.log({key: val}, step=epoch)
-        """
+        wandb.log(
+            {"train_loss": epoch_loss, "learning rate": scheduler.get_lr()}, step=epoch
+        )
+        print(f"Epoch {epoch} loss:{epoch_loss}")
+
+        if epoch % cfg.train.val_epoch == 0:
+            scores = validation(cfg, model, val_dataset)
+            for key, value in scores.items():
+                wandb.log({key: value}, step=epoch)
+                print(f"{key}:{value:.4f}")
 
     torch.save(model.module.state_dict(), cfg.result_dir)
 
@@ -192,10 +210,10 @@ if __name__ == "__main__":
         data, label, test_size=0.2, random_state=cfg.seed
     )
 
-    logger.info("Creating train dataset ...")
-    train_dataset = UTRDataset(cfg, train_data, train_label, tokenizer)
-    logger.info("Creating val dataset...")
-    val_dataset = UTRDataset(cfg, val_data, val_label, tokenizer)
+    print("Creating train dataset ...")
+    train_dataset = UTRDataset(cfg, train_data, train_label, tokenizer, phase="train")
+    print("Creating val dataset...")
+    val_dataset = UTRDataset(cfg, val_data, val_label, tokenizer, phase="val")
 
     model = PerformerModel(cfg.models)
     model.to(device)
