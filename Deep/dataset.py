@@ -8,6 +8,7 @@ from sklearn import preprocessing
 import torch
 from torch.utils.data import Dataset
 
+from utils import seq_n_padding, onehot_encode
 
 logger = getLogger("Log").getChild("dataset")
 
@@ -160,6 +161,22 @@ class UTRDataset(Dataset):
             # self.all_token_type_ids[index],
         )
         return inputs, self.all_labels[index]
+
+    def __len__(self):
+        return self.data.shape[0]
+
+
+class UTRDataset_CNN(Dataset):
+    def __init__(self, data, label):
+        super().__init__()
+        self.data = data
+        self.label = label
+
+    def __getitem__(self, index):
+        seqs = self.data.iloc[index][["five_prime", "cds", "three_prime"].values]
+        seq = seq_n_padding(seqs)
+        onehot_seq = onehot_encode(seq)
+        return onehot_seq, self.label[index]
 
     def __len__(self):
         return self.data.shape[0]

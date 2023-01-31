@@ -42,6 +42,27 @@ def mernize(matched_db):
     return matched_db
 
 
+def restrict_length(
+    seq_db,
+    five_min=50,
+    five_max=500,
+    cds_min=30,
+    cds_max=2500,
+    three_min=50,
+    three_max=500,
+):
+    restricted_seq = seq_db[
+        (seq_db["five_length"] > five_min)
+        & (seq_db["five_length"] < five_max)
+        & (seq_db["cds_length"] > cds_min)
+        & (seq_db["cds_length"] < cds_max)
+        & (seq_db["three_length"] > three_min)
+        & (seq_db["three_length"] < three_max)
+    ]
+
+    return restricted_seq
+
+
 def cut_higer_te(matched_df, threth=1000):
     matched_df = matched_df.sort_values("te", ascending=False).iloc[threth:]
     return matched_df
@@ -54,7 +75,9 @@ if __name__ == "__main__":
     TE_data = pd.read_table(args.te_data, sep=" ")
     TE_data = TE_data[TE_data.isnull().sum(axis=1) == 0]
 
-    matched_df = match(seq_db, TE_data)
+    restricted_seq_db = restrict_length(seq_db)
+
+    matched_df = match(restricted_seq_db, TE_data)
     matched_df = mernize(matched_df)
     # matched_df = cut_higer_te(matched_df)
     matched_df["te"] = np.log(matched_df["te"].values)  # log convertion
