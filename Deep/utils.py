@@ -26,7 +26,7 @@ def onehot_encode(seq):
 
         onehot_seq.append(onehot)
 
-    return onehot_seq
+    return np.array(onehot_seq).T
 
 
 def seq_n_padding(
@@ -40,15 +40,15 @@ def seq_n_padding(
         cds_max (int, optional): _description_. Defaults to 2500.
         three_max (int, optional): _description_. Defaults to 500.
     """
-
-    five_pad_len = five_max - seqs[0]
-    cds_pad_len = cds_max - seqs[1]
-    three_pad_len = three_max - seqs[2]
+    five_pad_len = five_max - len(seqs[0])
+    cds_pad_len = cds_max - len(seqs[1])
+    three_pad_len = three_max - len(seqs[2])
 
     seqs[0] = seqs[0] + "N" * five_pad_len
     seqs[1] = seqs[1] + "N" * cds_pad_len
     seqs[2] = seqs[2] + "N" * three_pad_len
 
+    # print(len(seqs[0]), len(seqs[1]), len(seqs[2]))
     pad_seq = "".join(seqs)
 
     return pad_seq
