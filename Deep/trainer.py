@@ -5,14 +5,18 @@ import argparse
 import json
 import random
 import math
+from logging import getLogger, config
+from attrdict import AttrDict
 from typing import Tuple, Union
 import yaml
 import random
 from functools import reduce
+from tqdm import tqdm
 import numpy as np
 import pandas as pd
 import wandb
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 
 import torch
 from torch import nn
@@ -38,6 +42,7 @@ def _argparse() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser()
     parser.add_argument("--cfg", required=True, type=str, help="config file path")
+    parser.add_argument("--logger_cfg", default="./configs/log_config.json")
     args = parser.parse_args()
 
     return args
@@ -55,7 +60,7 @@ def _parse_config(cfg_path: str) -> dict:
 
     with open(cfg_path) as f:
         config = yaml.safe_load(f.read())
-
+    config = AttrDict(config)
     return config
 
 
@@ -73,20 +78,36 @@ def load_data(data_path: str) -> Tuple[list, list]:
     return (data, label)
 
 
-def val(cfg: yaml, model: nn.Module, val_dataset: Dataset):
+def validation(cfg: yaml, model: nn.Module, val_dataset: Dataset):
+    """
 
+    Args:
+        cfg (yaml): cfg.train
+        model (nn.Module): _description_
+        val_dataset (Dataset): _description_
+
+    Returns:
+        _type_: _description_
+    """
     val_dataloader = DataLoader(
         val_dataset, batch_size=cfg.train.val_bs, shuffle=False, num_workers=2
     )
+    loss_fn = MSELoss()
     model.eval()
+    running_loss = 0
     eval_steps = 0
+    preds = None
     for data, labels in val_dataloader:
         eval_steps += 1
-        data, labels = data.to(device), labels.to(device)
+        data = tuple(d.to(device) for d in data)  # [input_ids,attention_masks]
+        labels = labels.to(device)
 
-        logits = model(data)
-        loss = MSELoss(logits, labels)
+        logits = model(data[0], mask=data[1])
+        loss = loss_fn(logits.view(-1), labels)
+        if len(cfg.gpus) > 1:
+            loss = loss.mean()
         running_loss += loss.item()
+
         if preds is None:
             preds = logits.detach().cpu().numpy()
             out_labels = labels.detach().cpu().numpy()
@@ -94,7 +115,11 @@ def val(cfg: yaml, model: nn.Module, val_dataset: Dataset):
             preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
             out_labels = np.append(out_labels, labels.detach().cpu().numpy(), axis=0)
 
-    eval_loss = running_loss // eval_steps
+    eval_loss = running_loss / eval_steps
+    preds = val_dataset.scaler.inverse_transform(preds).reshape(-1)
+    out_labels = val_dataset.scaler.inverse_transform(
+        out_labels.reshape(-1, 1)
+    ).reshape(-1)
     scores = metrics(preds, out_labels)
     scores["loss"] = eval_loss
 
@@ -108,53 +133,49 @@ def train(
     val_dataset: Dataset,
     optimizer: torch.optim,
 ) -> None:
-    cfg = cfg.train
     train_dataloader = DataLoader(
-        train_dataset, batch_size=cfg.train_bs, shuffle=True, num_workers=2
+        train_dataset, batch_size=cfg.train.train_bs, shuffle=True, num_workers=2
     )
-    scheduler = CosineAnnealingWarmRestarts(
-        optimizer,
-        first_cycle_steps=15,
-        cycle_mult=2,
-        max_lr=cfg.lr,
-        min_lr=1e-6,
-        warmup_steps=5,
-        gamma=0.9,
-    )
+    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-6)
+    loss_fn = nn.MSELoss()
 
-    for epoch in range(cfg.epoch):
+    for epoch in range(cfg.train.epoch):
         model.train()
         running_loss = 0.0
         train_steps = 0
-        for data, labels in train_dataloader:
-            data, labels = data.to(device), labels.to(device)
+        for data, labels in tqdm(train_dataloader, desc=f"Epoch {epoch}"):
+            data = tuple(d.to(device) for d in data)  # [input_ids,attention_masks]
+            labels = labels.to(device)
 
-            logits = model(data)
-            loss = MSELoss(logits, label)
+            logits = model(data[0], mask=data[1])
+            loss = loss_fn(logits.view(-1), labels)
             if len(cfg.gpus) > 1:
                 loss = loss.mean()
-            if cfg.grad_acc > 1:
-                loss = loss / cfg.grad_acc
+            if cfg.train.grad_acc > 1:
+                loss = loss / cfg.train.grad_acc
 
             loss.backward()
 
-            if (train_steps + 1) // cfg.grad_acc == 0:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), int(1e6))
+            if (train_steps + 1) % cfg.train.grad_acc == 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
                 optimizer.step()
+                scheduler.step()
                 optimizer.zero_grad()
 
             running_loss += loss.item()
             train_steps += 1
 
         epoch_loss = running_loss / train_steps
-        scheduler.step()
-        model.zero_grad()
-        wandb.log({"train_loss": epoch_loss}, step=epoch)
+        wandb.log(
+            {"train_loss": epoch_loss, "learning rate": scheduler.get_lr()}, step=epoch
+        )
+        print(f"Epoch {epoch} loss:{epoch_loss}")
 
-        if epoch % cfg.val_epoch == 0:
-            scores = val(cfg, model, val_dataset)
-            for key, val in scores.items():
-                wandb.log({key: val}, step=epoch)
+        if epoch % cfg.train.val_epoch == 0:
+            scores = validation(cfg, model, val_dataset)
+            for key, value in scores.items():
+                wandb.log({key: value}, step=epoch)
+                print(f"{key}:{value:.4f}")
 
     torch.save(model.module.state_dict(), cfg.result_dir)
 
@@ -163,6 +184,14 @@ if __name__ == "__main__":
 
     args = _argparse()
     cfg = _parse_config(args.cfg)
+
+    # Setting logger
+    with open(args.logger_cfg, "r") as f:
+        log_conf = json.load(f)
+    config.dictConfig(log_conf)
+    logger = getLogger("Log")
+    logger.info(cfg)
+
     wandb.init(
         name=f"{os.path.basename(cfg.result_dir)}", project="mrna_full", config=cfg
     )
@@ -171,14 +200,20 @@ if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
     num_gpu = len(cfg.gpus)
 
-    tokenizer = DNATokenizer(vocab_file=cfg.vocab_file)
+    tokenizer = DNATokenizer(
+        vocab_file=cfg.dataset.vocab_file, max_len=cfg.dataset.max_length
+    )  # for [CLS],[SEP] tokens
 
+    logger.info(f"loading data from {cfg.data}")
     data, label = load_data(cfg.data)
     train_data, val_data, train_label, val_label = train_test_split(
         data, label, test_size=0.2, random_state=cfg.seed
     )
-    train_dataset = UTRDataset(cfg, train_data, train_label, tokenizer)
-    val_dataset = UTRDataset(cfg, val_data, val_label, tokenizer)
+
+    print("Creating train dataset ...")
+    train_dataset = UTRDataset(cfg, train_data, train_label, tokenizer, phase="train")
+    print("Creating val dataset...")
+    val_dataset = UTRDataset(cfg, val_data, val_label, tokenizer, phase="val")
 
     model = PerformerModel(cfg.models)
     model.to(device)
@@ -186,6 +221,6 @@ if __name__ == "__main__":
         model = DP(model)
 
     # optimizer
-    optimizer = Adam(model.parameters(), lr=cfg.train.lr)
+    optimizer = Adam(model.parameters(), lr=float(cfg.train.lr))
 
     train(cfg, model, train_dataset, val_dataset, optimizer)

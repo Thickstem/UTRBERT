@@ -29,32 +29,37 @@ logger = logging.getLogger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 
-
-PRETRAINED_VOCAB_FILES_MAP = {"vocab_file": {"dna3": "https://raw.githubusercontent.com/jerryji1993/DNABERT/master/src/transformers/dnabert-config/bert-config-3/vocab.txt",
-                                             "dna4": "https://raw.githubusercontent.com/jerryji1993/DNABERT/master/src/transformers/dnabert-config/bert-config-4/vocab.txt",
-                                             "dna5": "https://raw.githubusercontent.com/jerryji1993/DNABERT/master/src/transformers/dnabert-config/bert-config-5/vocab.txt",
-                                             "dna6": "https://raw.githubusercontent.com/jerryji1993/DNABERT/master/src/transformers/dnabert-config/bert-config-6/vocab.txt"}}
-
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {
+        "dna3": "https://raw.githubusercontent.com/jerryji1993/DNABERT/master/src/transformers/dnabert-config/bert-config-3/vocab.txt",
+        "dna4": "https://raw.githubusercontent.com/jerryji1993/DNABERT/master/src/transformers/dnabert-config/bert-config-4/vocab.txt",
+        "dna5": "https://raw.githubusercontent.com/jerryji1993/DNABERT/master/src/transformers/dnabert-config/bert-config-5/vocab.txt",
+        "dna6": "https://raw.githubusercontent.com/jerryji1993/DNABERT/master/src/transformers/dnabert-config/bert-config-6/vocab.txt",
+    }
+}
 
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-                                          "dna3": 512,
-                                          "dna4": 512,
-                                          "dna5": 512,
-                                          "dna6": 512}
+    "dna3": 512,
+    "dna4": 512,
+    "dna5": 512,
+    "dna6": 512,
+}
 
 PRETRAINED_INIT_CONFIGURATION = {
     "dna3": {"do_lower_case": False},
     "dna4": {"do_lower_case": False},
     "dna5": {"do_lower_case": False},
-    "dna6": {"do_lower_case": False}}
+    "dna6": {"do_lower_case": False},
+}
 
 VOCAB_KMER = {
     "69": "3",
     "106": "3",
     "261": "4",
     "1029": "5",
-    "4101": "6",}
+    "4101": "6",
+}
 
 PSEUDO_CORRESP = {
     69: 6,
@@ -93,7 +98,8 @@ PSEUDO_CORRESP = {
     102: 59,
     103: 60,
     104: 62,
-    105: 66}
+    105: 66,
+}
 
 
 def load_vocab(vocab_file):
@@ -136,7 +142,6 @@ class DNATokenizer(PreTrainedTokenizer):
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-
     def __init__(
         self,
         vocab_file,
@@ -178,19 +183,25 @@ class DNATokenizer(PreTrainedTokenizer):
         )
         self.vocab = load_vocab(vocab_file)
         self.kmer = VOCAB_KMER[str(len(self.vocab))]
-        self.max_len  = max_len
-        #self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
-        #self.max_len_sentences_pair = self.max_len - 3  # take into account special tokens
+        self.max_len = max_len
+        # self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
+        # self.max_len_sentences_pair = self.max_len - 3  # take into account special tokens
 
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 "Can't find a vocabulary file at path '{}'. To load the vocabulary from a Google pretrained "
-                "model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`".format(vocab_file)
+                "model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`".format(
+                    vocab_file
+                )
             )
-        self.ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.vocab.items()])
+        self.ids_to_tokens = collections.OrderedDict(
+            [(ids, tok) for tok, ids in self.vocab.items()]
+        )
         self.basic_tokenizer = BasicTokenizer(
-                do_lower_case=do_lower_case, never_split=never_split, tokenize_chinese_chars=tokenize_chinese_chars
-            )
+            do_lower_case=do_lower_case,
+            never_split=never_split,
+            tokenize_chinese_chars=tokenize_chinese_chars,
+        )
 
     @property
     def vocab_size(self):
@@ -198,13 +209,15 @@ class DNATokenizer(PreTrainedTokenizer):
 
     def _tokenize(self, text):
         split_tokens = []
-        for token in self.basic_tokenizer.tokenize(text, never_split=self.all_special_tokens):
-                split_tokens.append(token)
+        for token in self.basic_tokenizer.tokenize(
+            text, never_split=self.all_special_tokens
+        ):
+            split_tokens.append(token)
         # print(split_tokens)
         return split_tokens
 
     def _convert_token_to_id(self, token):
-        """ Converts a token (str) in an id using the vocab. """
+        """Converts a token (str) in an id using the vocab."""
         return self.vocab.get(token, self.vocab.get(self.unk_token))
 
     def _convert_id_to_token(self, index):
@@ -212,7 +225,7 @@ class DNATokenizer(PreTrainedTokenizer):
         return self.ids_to_tokens.get(index, self.unk_token)
 
     def convert_tokens_to_string(self, tokens):
-        """ Converts a sequence of tokens (string) in a single string. """
+        """Converts a sequence of tokens (string) in a single string."""
         out_string = " ".join(tokens).replace(" ##", "").strip()
         return out_string
 
@@ -228,18 +241,27 @@ class DNATokenizer(PreTrainedTokenizer):
         sep = [self.sep_token_id]
 
         if token_ids_1 is None:
+            """
             if len(token_ids_0) < 510:
                 return cls + token_ids_0 + sep
             else:
                 output = []
-                num_pieces = int(len(token_ids_0)//510) + 1
+                num_pieces = int(len(token_ids_0) // 510) + 1
                 for i in range(num_pieces):
-                    output.extend(cls + token_ids_0[510*i:min(len(token_ids_0), 510*(i+1))] + sep)
+                    output.extend(
+                        cls
+                        + token_ids_0[510 * i : min(len(token_ids_0), 510 * (i + 1))]
+                        + sep
+                    )
                 return output
+            """
+            return cls + token_ids_0 + sep
 
         return cls + token_ids_0 + sep + token_ids_1 + sep
 
-    def get_special_tokens_mask(self, token_ids_0, token_ids_1=None, already_has_special_tokens=False):
+    def get_special_tokens_mask(
+        self, token_ids_0, token_ids_1=None, already_has_special_tokens=False
+    ):
         """
         Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer ``prepare_for_model`` or ``encode_plus`` methods.
@@ -261,20 +283,32 @@ class DNATokenizer(PreTrainedTokenizer):
                     "You should not supply a second sequence if the provided sequence of "
                     "ids is already formated with special tokens for the model."
                 )
-            return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
+            return list(
+                map(
+                    lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0,
+                    token_ids_0,
+                )
+            )
 
         if token_ids_1 is not None:
             return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
-        
+
+        else:
+            return [1] + ([0] * len(token_ids_0)) + [1]
+
+        """
         if len(token_ids_0) < 510:
             return [1] + ([0] * len(token_ids_0)) + [1]
         else:
             output = []
-            num_pieces = int(len(token_ids_0)//510) + 1
+            num_pieces = int(len(token_ids_0) // 510) + 1
             for i in range(num_pieces):
-                output.extend([1] + ([0] * (min(len(token_ids_0), 510*(i+1))-510*i)) + [1])
+                output.extend(
+                    [1] + ([0] * (min(len(token_ids_0), 510 * (i + 1)) - 510 * i)) + [1]
+                )
             return output
             return [1] + ([0] * len(token_ids_0)) + [1]
+        """
 
     def create_token_type_ids_from_sequences(self, token_ids_0, token_ids_1=None):
         """
@@ -288,11 +322,14 @@ class DNATokenizer(PreTrainedTokenizer):
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
         if token_ids_1 is None:
+            """
             if len(token_ids_0) < 510:
                 return len(cls + token_ids_0 + sep) * [0]
             else:
-                num_pieces = int(len(token_ids_0)//510) + 1
-                return (len(cls + token_ids_0 + sep) + 2*(num_pieces-1)) * [0]
+                num_pieces = int(len(token_ids_0) // 510) + 1
+                return (len(cls + token_ids_0 + sep) + 2 * (num_pieces - 1)) * [0]
+            """
+            return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
     def save_vocabulary(self, vocab_path):
@@ -307,7 +344,9 @@ class DNATokenizer(PreTrainedTokenizer):
                 if index != token_index:
                     logger.warning(
                         "Saving vocabulary to {}: vocabulary indices are not consecutive."
-                        " Please check that the vocabulary is not corrupted!".format(vocab_file)
+                        " Please check that the vocabulary is not corrupted!".format(
+                            vocab_file
+                        )
                     )
                     index = token_index
                 writer.write(token + "\n")
@@ -318,8 +357,10 @@ class DNATokenizer(PreTrainedTokenizer):
 class BasicTokenizer(object):
     """Runs basic tokenization (punctuation splitting, lower casing, etc.)."""
 
-    def __init__(self, do_lower_case=False, never_split=None, tokenize_chinese_chars=True):
-        """ Constructs a BasicTokenizer.
+    def __init__(
+        self, do_lower_case=False, never_split=None, tokenize_chinese_chars=True
+    ):
+        """Constructs a BasicTokenizer.
 
         Args:
             **do_lower_case**: Whether to lower case the input.
@@ -339,7 +380,7 @@ class BasicTokenizer(object):
         self.tokenize_chinese_chars = tokenize_chinese_chars
 
     def tokenize(self, text, never_split=None):
-        """ Basic Tokenization of a piece of text.
+        """Basic Tokenization of a piece of text.
             Split on "white spaces" only, for sub-word tokenization, see WordPieceTokenizer.
 
         Args:
@@ -348,7 +389,9 @@ class BasicTokenizer(object):
                 Now implemented directly at the base class level (see :func:`PreTrainedTokenizer.tokenize`)
                 List of token not to split.
         """
-        never_split = self.never_split + (never_split if never_split is not None else [])
+        never_split = self.never_split + (
+            never_split if never_split is not None else []
+        )
         text = self._clean_text(text)
         # This was added on November 1st, 2018 for the multilingual and Chinese
         # models. This is also applied to the English models now, but it doesn't
@@ -399,8 +442,6 @@ class BasicTokenizer(object):
 
         return ["".join(x) for x in output]
 
-
-
     def _clean_text(self, text):
         """Performs invalid character removal and whitespace cleanup on text."""
         output = []
@@ -446,7 +487,12 @@ def _is_punctuation(char):
     # Characters such as "^", "$", and "`" are not in the Unicode
     # Punctuation class but we treat them as punctuation anyways, for
     # consistency.
-    if (cp >= 33 and cp <= 47) or (cp >= 58 and cp <= 64) or (cp >= 91 and cp <= 96) or (cp >= 123 and cp <= 126):
+    if (
+        (cp >= 33 and cp <= 47)
+        or (cp >= 58 and cp <= 64)
+        or (cp >= 91 and cp <= 96)
+        or (cp >= 123 and cp <= 126)
+    ):
         return True
     cat = unicodedata.category(char)
     if cat.startswith("P"):

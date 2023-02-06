@@ -1,5 +1,6 @@
 # General params
 result_dir: mrna_full_basic
+data_dir: ../data
 data: ../data/mrna_full_hek.csv # path to raw data csv
 seed: 2023
 gpus: [0,1]
@@ -9,7 +10,7 @@ train:
   train_bs: 32 #Trainin batch size
   val_bs: 16 #Validation batch size
   lr: 1e-4 #Learning rate
-  epoch: 30 # Training epoch
+  epoch: 150 # Training epoch
   val_epoch: 5 #Validate in each this epoch
   grad_acc: 1 #Gradient_accumulations steps
 
@@ -25,16 +26,16 @@ dataset:
 # Params related to Performer models
 models:
   num_tokens: 69
-  max_seq_len: 5000
-  dim: 512
-  depth: 6
-  heads: 12
+  max_seq_len: 5002
+  dim: 384
+  depth: 2
+  heads: 6
   dim_head: 64
   local_attn_heads: 0
   local_window_size: 256
   causal: False
   ff_mult: 4
-  nb_features: None
+  nb_features: Null
   feature_redraw_interval: 1000
   reversible: False
   ff_chunks: 1
@@ -51,8 +52,9 @@ models:
   tie_embed: False
   rotary_position_emb: True
   axial_position_emb: False
-  axial_position_shape: None
-  auto_check_redraw: True
+  axial_position_shape: Null
+  auto_check_redraw: False
   qkv_bias: False
   attn_out_bias: False
   shift_tokens: False
+  label_num : 1
