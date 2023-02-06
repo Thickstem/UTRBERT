@@ -4,7 +4,7 @@ import copy
 from logging import getLogger
 from tqdm import tqdm
 import numpy as np
-from sklearn import preprocessing
+from sklearn.preprocessing import StandardScaler
 import torch
 from torch.utils.data import Dataset
 
@@ -145,11 +145,9 @@ class UTRDataset(Dataset):
 
         all_labels = np.array([f.label for f in self.features], dtype=float)
         if phase == "val":
-            self.scaler = preprocessing.StandardScaler().fit(all_labels.reshape(-1, 1))
+            self.scaler = StandardScaler().fit(all_labels.reshape(-1, 1))
         all_labels = (
-            preprocessing.StandardScaler()
-            .fit_transform(all_labels.reshape(-1, 1))
-            .reshape(-1)
+            StandardScaler().fit_transform(all_labels.reshape(-1, 1)).reshape(-1)
         )
         self.all_labels = torch.tensor(all_labels, dtype=torch.float)
 
@@ -167,16 +165,21 @@ class UTRDataset(Dataset):
 
 
 class UTRDataset_CNN(Dataset):
-    def __init__(self, data, label):
+    def __init__(self, data, label, phase):
         super().__init__()
         self.data = data
         self.label = label
+        if phase == "train":
+            self.scaler = StandardScaler().fit(self.label.reshape(-1, 1))
+            self.label = self.scaler.transform(self.label.reshape(-1, 1))
+
+        self.label = torch.tensor(self.label, dtype=torch.float)
 
     def __getitem__(self, index):
-        seqs = self.data.iloc[index][["five_prime", "cds", "three_prime"].values]
+        seqs = self.data[index]
         seq = seq_n_padding(seqs)
         onehot_seq = onehot_encode(seq)
-        return onehot_seq, self.label[index]
+        return torch.tensor(onehot_seq, dtype=torch.float), self.label[index]
 
     def __len__(self):
         return self.data.shape[0]
