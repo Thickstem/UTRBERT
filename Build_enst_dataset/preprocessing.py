@@ -8,6 +8,7 @@ def _argparse():
     parser = argparse.ArgumentParser()
     parser.add_argument("--sequence_db", required=True, type=str)
     parser.add_argument("--te_data", required=True, type=str)
+    parser.add_argument("--no_mer", action="store_true")
     parser.add_argument("--save", required=True, type=str)
 
     args = parser.parse_args()
@@ -78,7 +79,8 @@ if __name__ == "__main__":
     restricted_seq_db = restrict_length(seq_db)
 
     matched_df = match(restricted_seq_db, TE_data)
-    matched_df = mernize(matched_df)
+    if args.no_mer != True:
+        matched_df = mernize(matched_df)
     # matched_df = cut_higer_te(matched_df)
     matched_df["te"] = np.log(matched_df["te"].values)  # log convertion
     matched_df.to_csv(os.path.join("../data/", args.save))
