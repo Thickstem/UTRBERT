@@ -8,7 +8,7 @@ from sklearn.preprocessing import StandardScaler
 import torch
 from torch.utils.data import Dataset
 
-from utils import seq_n_padding, onehot_encode
+from utils import Seq_n_padding, onehot_encode
 
 logger = getLogger("Log").getChild("dataset")
 
@@ -165,10 +165,12 @@ class UTRDataset(Dataset):
 
 
 class UTRDataset_CNN(Dataset):
-    def __init__(self, data, label, phase):
+    def __init__(self, data, label, phase, regions):
         super().__init__()
         self.data = data
         self.label = label
+        self.padder = Seq_n_padding(regions=regions)
+
         if phase == "train":
             self.scaler = StandardScaler().fit(self.label.reshape(-1, 1))
             self.label = self.scaler.transform(self.label.reshape(-1, 1))
@@ -177,7 +179,7 @@ class UTRDataset_CNN(Dataset):
 
     def __getitem__(self, index):
         seqs = self.data[index]
-        seq = seq_n_padding(seqs)
+        seq = self.padder.padding(seqs)
         onehot_seq = onehot_encode(seq)
         return torch.tensor(onehot_seq, dtype=torch.float), self.label[index]
 
