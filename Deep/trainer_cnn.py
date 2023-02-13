@@ -10,7 +10,6 @@ from attrdict import AttrDict
 from typing import Tuple, Union
 import yaml
 import random
-from functools import reduce
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
@@ -63,7 +62,9 @@ def _parse_config(cfg_path: str) -> dict:
     return config
 
 
-def load_data(data_path: str) -> Tuple[list, list]:
+def load_data(
+    data_path: str, col=["fiveprime", "cds", "threeprime"]
+) -> Tuple[list, list]:
     """
     Args:
         data_path (str): path to csv file
@@ -72,7 +73,7 @@ def load_data(data_path: str) -> Tuple[list, list]:
         Tuple[List, List]: Each list of [data,label]
     """
     full_data = pd.read_csv(data_path, index_col=0)
-    data = full_data.loc[:, ["fiveprime", "cds", "threeprime"]].values
+    data = full_data.loc[:, col].values
     label = full_data["te"].values
     return (data, label)
 
@@ -91,7 +92,9 @@ def validation(
     Returns:
         _type_: _description_
     """
-    val_dataloader = DataLoader(val_dataset, batch_size=cfg.train.val_bs, shuffle=False)
+    val_dataloader = DataLoader(
+        val_dataset, batch_size=cfg.train.val_bs, shuffle=False, drop_last=True
+    )
     loss_fn = MSELoss()
     model.eval()
     running_loss = 0
@@ -103,7 +106,7 @@ def validation(
         labels = labels.to(device)
 
         logits = model(data)
-        loss = loss_fn(logits.view(-1), labels)
+        loss = loss_fn(logits.view(-1), labels.view(-1))
         if len(cfg.gpus) > 1:
             loss = loss.mean()
         running_loss += loss.item()
@@ -119,7 +122,7 @@ def validation(
     preds = scaler.inverse_transform(preds).reshape(-1)
 
     scores = metrics(preds, out_labels)
-    scores["loss"] = eval_loss
+    scores["val_loss"] = eval_loss
 
     return scores
 
@@ -132,9 +135,10 @@ def train(
     optimizer: torch.optim,
 ) -> None:
     train_dataloader = DataLoader(
-        train_dataset, batch_size=cfg.train.train_bs, shuffle=True
+        train_dataset, batch_size=cfg.train.train_bs, shuffle=True, drop_last=True
     )
     loss_fn = nn.MSELoss()
+    scheduler = StepLR(optimizer, step_size=100)
 
     for epoch in range(cfg.train.epoch):
         model.train()
@@ -144,9 +148,10 @@ def train(
 
             data = data.to(device)  # [input_ids,attention_masks]
             labels = labels.to(device)
-
             logits = model(data)
-            loss = loss_fn(logits.view(-1), labels)
+
+            logits.view(-1)
+            loss = loss_fn(logits.view(-1), labels.view(-1))
             if len(cfg.gpus) > 1:
                 loss = loss.mean()
             if cfg.train.grad_acc > 1:
@@ -166,10 +171,12 @@ def train(
         wandb.log(
             {
                 "train_loss": epoch_loss,
+                "learning rate": optimizer.param_groups[0]["lr"],
             },
             step=epoch,
         )
         print(f"Epoch {epoch} loss:{epoch_loss}")
+        # scheduler.step()
 
         if (epoch + 1) % cfg.train.val_epoch == 0:
             scores = validation(cfg, model, val_dataset, scaler=train_dataset.scaler)
@@ -177,7 +184,7 @@ def train(
                 wandb.log({key: value}, step=epoch)
                 print(f"{key}:{value:.4f}")
 
-    torch.save(model.module.state_dict(), cfg.result_dir)
+    torch.save(model.module.state_dict(), os.path.join(cfg.result_dir, "latest.pth"))
 
 
 if __name__ == "__main__":
@@ -193,25 +200,33 @@ if __name__ == "__main__":
     logger.info(cfg)
 
     wandb.init(
-        name=f"{os.path.basename(cfg.result_dir)}", project="mrna_full", config=cfg
+        name=f"{os.path.basename(cfg.result_dir)}",
+        project=cfg.wandb_project,
+        config=cfg,
     )
 
+    cfg.result_dir = os.path.join("results", cfg.result_dir)
+    os.makedirs("results", exist_ok=True)
     os.makedirs(cfg.result_dir, exist_ok=True)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     num_gpu = len(cfg.gpus)
 
     logger.info(f"loading data from {cfg.data}")
-    data, label = load_data(cfg.data)
+    data, label = load_data(cfg.data, col=cfg.dataset.regions)
     train_data, val_data, train_label, val_label = train_test_split(
         data, label, test_size=0.2, random_state=cfg.seed
     )
 
     print("Creating train dataset ...")
-    train_dataset = UTRDataset_CNN(train_data, train_label, phase="train")
+    train_dataset = UTRDataset_CNN(
+        train_data, train_label, phase="train", regions=cfg.dataset.regions
+    )
     print("Creating val dataset...")
-    val_dataset = UTRDataset_CNN(val_data, val_label, phase="val")
+    val_dataset = UTRDataset_CNN(
+        val_data, val_label, phase="val", regions=cfg.dataset.regions
+    )
 
-    model = MRNA_CNN()
+    model = MRNA_CNN(cfg)
     model.to(device)
     if num_gpu > 1:
         model = DP(model)
