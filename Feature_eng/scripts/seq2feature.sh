@@ -1,4 +1,4 @@
-OUTPUT_NAME=Featurematrix_restricted_with_energy
+OUTPUT_NAME=Restricted_cds15
 
 
 python seq2feature.py --df_path /home/ksuga/UTRBERT/data/ensembl_data/ensembl_restricted_db.csv \
@@ -8,5 +8,5 @@ python seq2feature.py --df_path /home/ksuga/UTRBERT/data/ensembl_data/ensembl_re
 					  --save ${OUTPUT_NAME} \
 
 
-python feat_mat_python.py --file_prefix ./data/${OUTPUT_NAME} \
+python feat_mat_python.py --file_prefix ./data/${OUTPUT_NAME}/${OUTPUT_NAME} \
 

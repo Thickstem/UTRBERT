@@ -58,6 +58,7 @@ def build_seq_list(opt, cds_length=0):
 
 
 def multi(opt):
+
     cds_length = opt.cds_len
     txIDlist, seq_list = build_seq_list(opt, cds_length)
     print(txIDlist)
@@ -112,4 +113,5 @@ def multi(opt):
 
 if __name__ == "__main__":
     opt = _argparse()
+    os.makedirs(opt.out_dir, exist_ok=True)
     multi(opt)

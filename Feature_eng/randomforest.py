@@ -1,5 +1,8 @@
 import os
 import time
+import json
+import logging
+import logging.config
 import argparse
 import pandas as pd
 import numpy as np
@@ -7,6 +10,9 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 from scipy.stats import spearmanr, pearsonr
+
+
+_EXEC_FILE_NAME = os.path.basename(__file__)[:-3]
 
 
 def _parse_args():
@@ -20,14 +26,24 @@ def _parse_args():
     parser.add_argument("--save_dir", required=True)
     parser.add_argument("--riboseq_thresh", type=float, default=0.1)
     parser.add_argument("--rnaseq_thresh", type=float, default=5)
+    parser.add_argument("--config", default="./scripts/conf.json")
 
     opt = parser.parse_args()
     return opt
 
 
+def read_conf_file(conf_file):
+    with open(conf_file, "r", encoding="utf-8") as f:
+        file = json.load(f)
+        logging.config.dictConfig(file)
+
+
+def get_logger(logger_="simpleDefault"):
+    """Generating Logger"""
+    return logging.getLogger(logger_)
+
+
 def metrics(preds: np.ndarray, labels: np.ndarray):
-    print(f"preds:{preds}")
-    print(f"label:{labels}")
     r2 = r2_score(labels, preds)
     mae = mean_absolute_error(labels, preds)
     rmse = np.sqrt(mean_squared_error(labels, preds))
@@ -71,33 +87,36 @@ def data_preparation(opt: argparse.Namespace):
     return feat_te
 
 
-def main():
-    opt = _parse_args()
+def main(opt, logger):
+    logger.debug(vars(opt))
     t1 = time.time()
-    print("Data preparing...")
+    logger.debug("Data preparing...")
     data = data_preparation(opt)  # feat_te:[trans_id,feature+te]
-    print(f"Data size:{data.shape}")
-    print("")
+    logger.debug(f"Data size:{data.shape}")
+
     X_train, X_test, y_train, y_test = train_test_split(
         data.iloc[:, :-1], data.iloc[:, -1], test_size=0.2
     )
 
     model = RandomForestRegressor()
 
-    print(f"Model fitting...")
+    logger.debug(f"Model fitting...")
     model.fit(X_train, y_train)
-    print(f"Predicting...")
+    logger.debug(f"Predicting...")
     preds = model.predict(X_test)
-    print(f"predicting time:{(time.time()-t1):.3f}")
+    logger.debug(f"predicting time:{(time.time()-t1):.3f}")
 
     scores = metrics(preds, labels=y_test.values)
 
     with open(os.path.join(opt.save_dir, "RF_res.txt"), "w") as f:
         for k, v in scores.items():
-            print(f"{k}:{v:.4f}")
+            logger.debug(f"{k}:{v:.4f}")
             f.write(f"{k}:{v:.4f}\n")
-    print(f"Elapsed time:{(time.time()-t1):.3f} s")
+    logger.debug(f"Elapsed time:{(time.time()-t1):.3f} s")
 
 
 if __name__ == "__main__":
-    main()
+    opt = _parse_args()
+    read_conf_file(opt.config)
+    logger = get_logger(logger_=_EXEC_FILE_NAME)
+    main(opt, logger)
