@@ -119,6 +119,7 @@ def main(opt, logger):
         score_dict = {}
         with open(os.path.join(opt.save_dir, "results.txt"), "w") as res_f:
             for i in range(opt.cv):
+
                 X_train, X_test, y_train, y_test = train_test_split(
                     data.iloc[:, :-1], data.iloc[:, -1], test_size=0.2, random_state=i
                 )
@@ -129,27 +130,30 @@ def main(opt, logger):
                 model.fit(X_train, y_train)
                 logger.debug(f"{i+1}/{opt.cv}:Predicting...")
                 preds = model.predict(X_test)
-                logger.debug(f"{i+1}/{opt.cv}:predicting time:{(time.time()-t1):.3f}")
+                logger.debug(f"{i+1}/{opt.cv}:predicting time:{(time.time()-t1):.3f} s")
 
                 scores = metrics(preds, labels=y_test.values)
 
-                with open(os.path.join(opt.save_dir, "RF_res.txt"), "w") as res_f:
-                    for k, v in scores.items():
-                        logger.debug(f"{i+1}/{opt.cv}: {k}:{v:.4f}")
-                        res_f.write(f"{i+1}/{opt.cv}: {k}:{v:.4f}\n")
-                        if k not in score_dict.keys():
-                            score_dict[k] = [v]
-                        else:
-                            score_dict[k].append(v)
-
                 for k, v in scores.items():
-                    res_f.write(f"{k}:mean:{np.mean(v):.4f}, var:{np.var(v):.4f}")
-                    logger.debug(f"{k}:mean:{np.mean(v):.4f}, var:{np.var(v):.4f}")
-                logger.debug(f"Elapsed time:{(time.time()-t1):.3f} s")
+                    logger.debug(f"{i+1}/{opt.cv}: {k}:{v:.4f}")
+                    res_f.write(f"{i+1}/{opt.cv}: {k}:{v:.4f}\n")
+
+                    if k not in score_dict.keys():
+                        score_dict[k] = [v]
+                    else:
+                        score_dict[k].append(v)
+
+                res_f.write("\n")
+
+            for k, v in scores.items():
+                res_f.write(f"{k}:mean:{np.mean(v):.4f}, var:{np.var(v):.4f}")
+                logger.debug(f"{k}:mean:{np.mean(v):.4f}, var:{np.var(v):.4f}")
+
+            logger.debug(f"Elapsed time:{(time.time()-t1):.3f} s")
 
 
 if __name__ == "__main__":
     opt = _parse_args()
     read_conf_file(opt.config)
-    logger = get_logger(logger_=os.path.basename(opt.feature))
+    logger = get_logger(logger_=os.path.basename(opt.feature.replace("_final.csv", "")))
     main(opt, logger)
