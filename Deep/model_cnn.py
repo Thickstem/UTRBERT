@@ -4,60 +4,82 @@ import torch.functional as F
 
 
 class MRNA_CNN(nn.Module):
-    def __init__(self):
+    def __init__(self, cfg):
         super().__init__()
+        self.cfg = cfg.model
         self.layer1 = nn.Sequential(
             nn.Conv1d(
                 in_channels=4,
-                out_channels=128,
-                kernel_size=40,
+                out_channels=self.cfg.conv1_ch,
+                kernel_size=self.cfg.conv1_kernel,
                 stride=1,
                 dilation=1,
             ),
             nn.ReLU(),
-            nn.BatchNorm1d(num_features=128),  # num_features = channel num (N,C,L)
+            nn.BatchNorm1d(
+                num_features=self.cfg.conv1_ch
+            ),  # num_features = channel num (Batch,Channel,Length)
             nn.Dropout(p=0.02),
             nn.MaxPool1d(kernel_size=2, stride=2),
         )
 
         self.layer2 = nn.Sequential(
             nn.Conv1d(
-                in_channels=128, out_channels=32, kernel_size=30, stride=1, dilation=1
+                in_channels=self.cfg.conv1_ch,
+                out_channels=self.cfg.conv2_ch,
+                kernel_size=self.cfg.conv2_kernel,
+                stride=1,
+                dilation=1,
             ),
             nn.ReLU(),
-            nn.BatchNorm1d(num_features=32),
+            nn.BatchNorm1d(num_features=self.cfg.conv2_ch),
             nn.Dropout(p=0.02),
-            nn.MaxPool1d(kernel_size=2, stride=2),
+            # nn.MaxPool1d(kernel_size=2, stride=2),
         )
 
         self.layer3 = nn.Sequential(
             nn.Conv1d(
-                in_channels=32,
-                out_channels=64,
-                kernel_size=30,
+                in_channels=self.cfg.conv2_ch,
+                out_channels=self.cfg.conv3_ch,
+                kernel_size=self.cfg.conv3_kernel,
                 stride=1,
-                dilation=4,
+                dilation=1,
             ),
             nn.ReLU(),
-            nn.BatchNorm1d(num_features=64),
+            nn.BatchNorm1d(num_features=self.cfg.conv3_ch),
             nn.Dropout(p=0.02),
         )
 
+        self.linear_input_dim = int(
+            self.cfg.conv3_ch
+            * (
+                (self.cfg.max_len - self.cfg.conv1_kernel) // 2
+                - (self.cfg.conv2_kernel - 1)
+                - (self.cfg.conv3_kernel - 1)
+            )
+        )
+
         self.layer4 = nn.Sequential(
-            nn.Linear(in_features=46976, out_features=128),
+            nn.Linear(
+                in_features=self.linear_input_dim, out_features=self.cfg.linear1_dim
+            ),
             nn.ReLU(),
-            nn.BatchNorm1d(num_features=128),
+            nn.BatchNorm1d(num_features=self.cfg.linear1_dim),
             nn.Dropout(p=0.02),
         )
 
         self.layer5 = nn.Sequential(
-            nn.Linear(in_features=128, out_features=32),
+            nn.Linear(
+                in_features=self.cfg.linear1_dim, out_features=self.cfg.linear2_dim
+            ),
             nn.ReLU(),
-            nn.BatchNorm1d(num_features=32),
+            nn.BatchNorm1d(num_features=self.cfg.linear2_dim),
             nn.Dropout(p=0.02),
         )
 
-        self.layer_out = nn.Sequential(nn.Linear(in_features=32, out_features=1))
+        self.layer_out = nn.Sequential(
+            nn.Linear(in_features=self.cfg.linear2_dim, out_features=1)
+        )
 
         self.flatter = nn.Flatten()
 

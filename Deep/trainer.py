@@ -103,7 +103,7 @@ def validation(cfg: yaml, model: nn.Module, val_dataset: Dataset):
         labels = labels.to(device)
 
         logits = model(data[0], mask=data[1])
-        loss = loss_fn(logits.view(-1), labels)
+        loss = loss_fn(logits.view(-1), labels.view(-1))
         if len(cfg.gpus) > 1:
             loss = loss.mean()
         running_loss += loss.item()
@@ -148,7 +148,7 @@ def train(
             labels = labels.to(device)
 
             logits = model(data[0], mask=data[1])
-            loss = loss_fn(logits.view(-1), labels)
+            loss = loss_fn(logits.view(-1), labels.view(-1))
             if len(cfg.gpus) > 1:
                 loss = loss.mean()
             if cfg.train.grad_acc > 1:

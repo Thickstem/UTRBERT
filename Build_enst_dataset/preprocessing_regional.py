@@ -23,7 +23,8 @@ def seq2mer(seq, kmer=3):
     return mers
 
 
-def match(seq_db: pd.DataFrame, TE_data: pd.DataFrame):
+def match(seq_db: pd.DataFrame, TE_data: pd.DataFrame, regions: list):
+    reg_col = ["gene", "te"]
     seq_db_ids = seq_db["trans_id"].values
     TE_data_ids = TE_data["ensembl_tx_id"].values
     matched_id = set(seq_db_ids) & set(TE_data_ids)
@@ -33,18 +34,18 @@ def match(seq_db: pd.DataFrame, TE_data: pd.DataFrame):
 
     seq_db["te"] = te_value
 
-    return seq_db
+    return seq_db[reg_col + regions]
 
 
-def mernize(matched_db):
-    matched_db["fiveprime"] = list(map(seq2mer, matched_db["fiveprime"].values))
-    matched_db["threeprime"] = list(map(seq2mer, matched_db["threeprime"].values))
-    matched_db["cds"] = list(map(seq2mer, matched_db["cds"].values))
+def mernize(matched_db, regions):
+    for reg in regions:
+        matched_db[reg] = list(map(seq2mer, matched_db[reg].values))
     return matched_db
 
 
 def restrict_length(
     seq_db,
+    regions: list,
     five_min=50,
     five_max=500,
     cds_min=30,
@@ -52,14 +53,21 @@ def restrict_length(
     three_min=50,
     three_max=500,
 ):
-    restricted_seq = seq_db[
-        (seq_db["five_length"] > five_min)
-        & (seq_db["five_length"] < five_max)
-        & (seq_db["cds_length"] > cds_min)
-        & (seq_db["cds_length"] < cds_max)
-        & (seq_db["three_length"] > three_min)
-        & (seq_db["three_length"] < three_max)
-    ]
+    for reg in regions:
+        if reg == "fiveprime":
+            restricted_seq = seq_db[
+                (seq_db["five_length"] > five_min) & (seq_db["five_length"] < five_max)
+            ]
+        elif reg == "cds":
+            restricted_seq = seq_db[
+                (seq_db["cds_length"] > cds_min) & (seq_db["cds_length"] < cds_max)
+            ]
+
+        elif reg == "threeprime":
+            restricted_seq = seq_db[
+                (seq_db["three_length"] > three_min)
+                & (seq_db["three_length"] < three_max)
+            ]
 
     return restricted_seq
 
@@ -71,18 +79,18 @@ def cut_higer_te(matched_df, threth=1000):
 
 if __name__ == "__main__":
     args = _argparse()
+    regions = ["fiveprime"]
 
     seq_db = pd.read_csv(args.sequence_db, index_col=0)
     TE_data = pd.read_table(args.te_data, sep=" ")
     TE_data = TE_data[TE_data.isnull().sum(axis=1) == 0]
 
-    # TE_data = TE_data[(TE_data["rpkm_riboseq"] > 0.1)]
+    TE_data = TE_data[(TE_data["rpkm_riboseq"] > 0.1) & (TE_data["rpkm_rnaseq"] > 5)]
 
-    restricted_seq_db = restrict_length(seq_db)
-
-    matched_df = match(restricted_seq_db, TE_data)
+    restricted_seq_db = restrict_length(seq_db, regions=regions)
+    matched_df = match(restricted_seq_db, TE_data, regions=regions)
     if args.no_mer != True:
-        matched_df = mernize(matched_df)
+        matched_df = mernize(matched_df, regions=regions)
     # matched_df = cut_higer_te(matched_df)
-    matched_df["te"] = np.log(matched_df["te"].values)  # log convertion
+    # matched_df["te"] = np.log(matched_df["te"].values)  # log convertion
     matched_df.to_csv(os.path.join("../data/", args.save))
