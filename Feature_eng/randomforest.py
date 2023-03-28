@@ -4,15 +4,13 @@ import json
 import logging
 import logging.config
 import argparse
+
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 from scipy.stats import spearmanr, pearsonr
-
-
-_EXEC_FILE_NAME = os.path.basename(__file__)[:-3]
 
 
 def _parse_args():
@@ -26,6 +24,7 @@ def _parse_args():
     parser.add_argument("--save_dir", required=True)
     parser.add_argument("--riboseq_thresh", type=float, default=0.1)
     parser.add_argument("--rnaseq_thresh", type=float, default=5)
+    parser.add_argument("--cv", type=int, default=0)
     parser.add_argument("--config", default="./scripts/conf.json")
 
     opt = parser.parse_args()
@@ -94,29 +93,63 @@ def main(opt, logger):
     data = data_preparation(opt)  # feat_te:[trans_id,feature+te]
     logger.debug(f"Data size:{data.shape}")
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        data.iloc[:, :-1], data.iloc[:, -1], test_size=0.2
-    )
+    if opt.cv == 0:
+        X_train, X_test, y_train, y_test = train_test_split(
+            data.iloc[:, :-1], data.iloc[:, -1], test_size=0.2, random_state=0
+        )
 
-    model = RandomForestRegressor()
+        model = RandomForestRegressor()
 
-    logger.debug(f"Model fitting...")
-    model.fit(X_train, y_train)
-    logger.debug(f"Predicting...")
-    preds = model.predict(X_test)
-    logger.debug(f"predicting time:{(time.time()-t1):.3f}")
+        logger.debug(f"Model fitting...")
+        model.fit(X_train, y_train)
+        logger.debug(f"Predicting...")
+        preds = model.predict(X_test)
+        logger.debug(f"predicting time:{(time.time()-t1):.3f}")
 
-    scores = metrics(preds, labels=y_test.values)
+        scores = metrics(preds, labels=y_test.values)
 
-    with open(os.path.join(opt.save_dir, "RF_res.txt"), "w") as f:
-        for k, v in scores.items():
-            logger.debug(f"{k}:{v:.4f}")
-            f.write(f"{k}:{v:.4f}\n")
-    logger.debug(f"Elapsed time:{(time.time()-t1):.3f} s")
+        with open(os.path.join(opt.save_dir, "RF_res.txt"), "w") as f:
+            for k, v in scores.items():
+                logger.debug(f"{k}:{v:.4f}")
+                f.write(f"{k}:{v:.4f}\n")
+        logger.debug(f"Elapsed time:{(time.time()-t1):.3f} s")
+
+    else:
+        logger.debug(f"Iterate for {opt.cv} times")
+        score_dict = {}
+        with open(os.path.join(opt.save_dir, "results.txt"), "w") as res_f:
+            for i in range(opt.cv):
+                X_train, X_test, y_train, y_test = train_test_split(
+                    data.iloc[:, :-1], data.iloc[:, -1], test_size=0.2, random_state=i
+                )
+
+                model = RandomForestRegressor()
+
+                logger.debug(f"{i+1}/{opt.cv}:Model fitting... ")
+                model.fit(X_train, y_train)
+                logger.debug(f"{i+1}/{opt.cv}:Predicting...")
+                preds = model.predict(X_test)
+                logger.debug(f"{i+1}/{opt.cv}:predicting time:{(time.time()-t1):.3f}")
+
+                scores = metrics(preds, labels=y_test.values)
+
+                with open(os.path.join(opt.save_dir, "RF_res.txt"), "w") as res_f:
+                    for k, v in scores.items():
+                        logger.debug(f"{i+1}/{opt.cv}: {k}:{v:.4f}")
+                        res_f.write(f"{i+1}/{opt.cv}: {k}:{v:.4f}\n")
+                        if k not in score_dict.keys():
+                            score_dict[k] = [v]
+                        else:
+                            score_dict[k].append(v)
+
+                for k, v in scores.items():
+                    res_f.write(f"{k}:mean:{np.mean(v):.4f}, var:{np.var(v):.4f}")
+                    logger.debug(f"{k}:mean:{np.mean(v):.4f}, var:{np.var(v):.4f}")
+                logger.debug(f"Elapsed time:{(time.time()-t1):.3f} s")
 
 
 if __name__ == "__main__":
     opt = _parse_args()
     read_conf_file(opt.config)
-    logger = get_logger(logger_=_EXEC_FILE_NAME)
+    logger = get_logger(logger_=os.path.basename(opt.feature))
     main(opt, logger)
