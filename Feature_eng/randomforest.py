@@ -24,8 +24,10 @@ def _parse_args():
     parser.add_argument("--save_dir", required=True)
     parser.add_argument("--riboseq_thresh", type=float, default=0.1)
     parser.add_argument("--rnaseq_thresh", type=float, default=5)
+    parser.add_argument("--test_size", type=float, default=0.2)
     parser.add_argument("--cv", type=int, default=0)
     parser.add_argument("--config", default="./scripts/conf.json")
+    parser.add_argument("--res_file", default="results")
 
     opt = parser.parse_args()
     return opt
@@ -95,7 +97,7 @@ def main(opt, logger):
 
     if opt.cv == 0:
         X_train, X_test, y_train, y_test = train_test_split(
-            data.iloc[:, :-1], data.iloc[:, -1], test_size=0.2, random_state=0
+            data.iloc[:, :-1], data.iloc[:, -1], test_size=opt.test_size, random_state=0
         )
 
         model = RandomForestRegressor()
@@ -108,7 +110,7 @@ def main(opt, logger):
 
         scores = metrics(preds, labels=y_test.values)
 
-        with open(os.path.join(opt.save_dir, "RF_res.txt"), "w") as f:
+        with open(os.path.join(opt.save_dir, opt.res_file + ".txt"), "w") as f:
             for k, v in scores.items():
                 logger.debug(f"{k}:{v:.4f}")
                 f.write(f"{k}:{v:.4f}\n")
@@ -117,26 +119,31 @@ def main(opt, logger):
     else:
         logger.debug(f"Iterate for {opt.cv} times")
         score_dict = {}
-        with open(os.path.join(opt.save_dir, "results.txt"), "w") as res_f:
+        with open(os.path.join(opt.save_dir, opt.res_file + ".txt"), "w") as res_f:
             for i in range(opt.cv):
 
                 X_train, X_test, y_train, y_test = train_test_split(
-                    data.iloc[:, :-1], data.iloc[:, -1], test_size=0.2, random_state=i
+                    data.iloc[:, :-1],
+                    data.iloc[:, -1],
+                    test_size=opt.test_size,
+                    random_state=i,
                 )
 
                 model = RandomForestRegressor()
 
-                logger.debug(f"{i+1}/{opt.cv}:Model fitting... ")
+                logger.debug(f"[{i+1}/{opt.cv}]:Model fitting... ")
                 model.fit(X_train, y_train)
-                logger.debug(f"{i+1}/{opt.cv}:Predicting...")
+                logger.debug(f"[{i+1}/{opt.cv}]:Predicting...")
                 preds = model.predict(X_test)
-                logger.debug(f"{i+1}/{opt.cv}:predicting time:{(time.time()-t1):.3f} s")
+                logger.debug(
+                    f"[{i+1}/{opt.cv}]:predicting time:{(time.time()-t1):.3f} s"
+                )
 
                 scores = metrics(preds, labels=y_test.values)
 
                 for k, v in scores.items():
-                    logger.debug(f"{i+1}/{opt.cv}: {k}:{v:.4f}")
-                    res_f.write(f"{i+1}/{opt.cv}: {k}:{v:.4f}\n")
+                    logger.debug(f"[{i+1}/{opt.cv}]: {k}:{v:.4f}")
+                    res_f.write(f"[{i+1}/{opt.cv}]: {k}:{v:.4f}\n")
 
                     if k not in score_dict.keys():
                         score_dict[k] = [v]
@@ -145,9 +152,16 @@ def main(opt, logger):
 
                 res_f.write("\n")
 
-            for k, v in scores.items():
-                res_f.write(f"{k}:mean:{np.mean(v):.4f}, var:{np.var(v):.4f}")
-                logger.debug(f"{k}:mean:{np.mean(v):.4f}, var:{np.var(v):.4f}")
+            stats_dict = {"score": [], "mean": [], "var": []}
+
+            for k, v in score_dict.items():
+                stats_dict["score"].append(k)
+                stats_dict["mean"].append(np.mean(v))
+                stats_dict["var"].append(np.var(v))
+
+            pd.DataFrame(stats_dict).to_csv(
+                os.path.join(opt.save_dir, opt.res_file + ".csv"), index=False
+            )
 
             logger.debug(f"Elapsed time:{(time.time()-t1):.3f} s")
 

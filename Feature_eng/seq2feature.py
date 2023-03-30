@@ -43,7 +43,9 @@ def single_test():
 
 def build_seq_list(opt, cds_length=0):
     df = pd.read_csv(opt.df_path, index_col=0)  # index = tx_id
-    tx_ids = df["trans_id"].values
+    # tx_ids = df["trans_id"].values
+    tx_ids = df.index.values
+
     if cds_length == 0:
         seqs = df["fiveprime"].values
     else:
@@ -54,6 +56,7 @@ def build_seq_list(opt, cds_length=0):
 
     bio_seqs = list(map(Seq, seqs))
 
+    return tx_ids, bio_seqs
     return tx_ids, bio_seqs
 
 
