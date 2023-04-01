@@ -1,3 +1,5 @@
-python preprocessing.py --sequence_db ../data/ensembl_data/ensembl_restricted_db.csv \
+python preprocessing_regional.py --sequence_db ../data/ensembl_data/full_found_trans.csv \
 	   					--te_data ../data/df_counts_and_len.TE_sorted.HEK_Andrev2015.with_annot.txt \
-	   					--save ../data/mrna_full_hek.csv
+						--no_mer \
+	   					--save ../data/mrna_five_hek_threshed.csv
+

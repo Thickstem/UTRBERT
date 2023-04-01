@@ -7,6 +7,7 @@ import argparse
 
 import pandas as pd
 import numpy as np
+import lightgbm as lgb
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
@@ -26,6 +27,9 @@ def _parse_args():
     parser.add_argument("--rnaseq_thresh", type=float, default=5)
     parser.add_argument("--test_size", type=float, default=0.2)
     parser.add_argument("--cv", type=int, default=0)
+    parser.add_argument(
+        "--model", default="rf", help="Model to use. rf:random forest, lgb:LightGBM"
+    )
     parser.add_argument("--config", default="./scripts/conf.json")
     parser.add_argument("--res_file", default="results")
 
@@ -100,7 +104,12 @@ def main(opt, logger):
             data.iloc[:, :-1], data.iloc[:, -1], test_size=opt.test_size, random_state=0
         )
 
-        model = RandomForestRegressor()
+        if opt.model == "rf":
+            model = RandomForestRegressor()
+        elif opt.model == "lgb":
+            model = lgb.LGBMRegressor()
+        else:
+            raise NameError()
 
         logger.debug(f"Model fitting...")
         model.fit(X_train, y_train)

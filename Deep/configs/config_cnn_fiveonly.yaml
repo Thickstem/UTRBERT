@@ -1,8 +1,8 @@
 # General params
-result_dir: mrna_fiveonly_cnn_step_scheduler
+result_dir: mrna_fiveonly_cnn_threshed_data
 wandb_project : mrna_te_pred
 data_dir: ../data
-data: ../data/mrna_five_hek.csv # path to raw data csv
+data: ../data/mrna_five_hek_threshed.csv # path to raw data csv
 seed: 2023
 gpus: [0,1]
 
@@ -17,7 +17,7 @@ train:
 
 # Params related to CNN model
 model:
-  max_len: 500
+  max_len: 3500
   conv1_ch: 120
   conv2_ch: 120
   conv3_ch: 120
