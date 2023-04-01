@@ -27,7 +27,7 @@ def match(seq_db: pd.DataFrame, TE_data: pd.DataFrame, regions: list):
     reg_col = ["gene", "te"]
     seq_db_ids = seq_db["trans_id"].values
     TE_data_ids = TE_data["ensembl_tx_id"].values
-    matched_id = set(seq_db_ids) & set(TE_data_ids)
+    matched_id = list(set(seq_db_ids) & set(TE_data_ids))
 
     seq_db = seq_db.set_index("trans_id").loc[matched_id]
     te_value = TE_data.set_index("ensembl_tx_id").loc[matched_id]["te"]
@@ -91,6 +91,6 @@ if __name__ == "__main__":
     matched_df = match(restricted_seq_db, TE_data, regions=regions)
     if args.no_mer != True:
         matched_df = mernize(matched_df, regions=regions)
-    # matched_df = cut_higer_te(matched_df)
-    # matched_df["te"] = np.log(matched_df["te"].values)  # log convertion
+
+    matched_df["te"] = np.log(matched_df["te"].values)  # log convertion
     matched_df.to_csv(os.path.join("../data/", args.save))

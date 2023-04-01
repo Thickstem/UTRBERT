@@ -176,7 +176,7 @@ def train(
             step=epoch,
         )
         print(f"Epoch {epoch} loss:{epoch_loss}")
-        # scheduler.step()
+        scheduler.step()
 
         if (epoch + 1) % cfg.train.val_epoch == 0:
             scores = validation(cfg, model, val_dataset, scaler=train_dataset.scaler)
