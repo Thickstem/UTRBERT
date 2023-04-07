@@ -138,7 +138,14 @@ def main(opt, logger):
                     random_state=i,
                 )
 
-                model = RandomForestRegressor()
+                if opt.model == "rf":
+                    model = RandomForestRegressor()
+                    logger.debug("model: RandomForest")
+                elif opt.model == "lgb":
+                    logger.debug("model: LightGBM")
+                    model = lgb.LGBMRegressor()
+                else:
+                    raise NameError()
 
                 logger.debug(f"[{i+1}/{opt.cv}]:Model fitting... ")
                 model.fit(X_train, y_train)
