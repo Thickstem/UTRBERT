@@ -6,6 +6,7 @@ from multiprocessing import Pool
 import gzip
 from Bio.Seq import Seq
 
+
 ##seq is seq object from bio.python
 class Seq2Feature:
     def __init__(self, cds_length):
@@ -74,7 +75,7 @@ class Seq2Feature:
         energy = float(output_lines[1].rsplit("(", 1)[1].strip("()").strip())
         return energy
 
-    def foldenergy_feature(self, seq):
+    def foldenergy_feature(self, seq) -> dict:
         dna_str = str(seq)
         feature_map = dict()
         feature_map["energy_5cap"] = self.RNAfold_energy(dna_str[:100])
@@ -91,7 +92,7 @@ class Seq2Feature:
         )
         return feature_map
 
-    def Kmer_feature(self, seq, klen=6):
+    def Kmer_feature(self, seq, klen=6) -> dict:
         feature_map = dict()
         seq = seq.upper()
         for k in range(1, klen + 1):
@@ -107,13 +108,14 @@ class Seq2Feature:
         print(cmd)
         os.system(cmd)
 
-    def run(self, seq):
+    def run(self, seq) -> dict:
         ##codon
         ret = list(self.codonFreq(seq).items())
         ##DNA CG composition
         ret += list(self.singleNucleotide_composition(seq).items())
         ## Kmer feature
         ret += list(self.Kmer_feature(seq).items())
+
         return ret
 
     def run_with_energy(self, seq):

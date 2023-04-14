@@ -27,10 +27,6 @@ def _parse_args():
     parser.add_argument("--rnaseq_thresh", type=float, default=5)
     parser.add_argument("--test_size", type=float, default=0.2)
     parser.add_argument("--cv", type=int, default=0)
-    parser.add_argument(
-        "--model", default="rf", help="Model to use. rf:random forest, lgb:LightGBM"
-    )
-    parser.add_argument("--importance", action="store_true")
     parser.add_argument("--config", default="./scripts/conf.json")
     parser.add_argument("--res_file", default="results")
 
@@ -65,7 +61,7 @@ def metrics(preds: np.ndarray, labels: np.ndarray):
     }
 
 
-def match(feat: pd.DataFrame, TE_data: pd.DataFrame) -> pd.DataFrame:
+def match(feat: pd.DataFrame, TE_data: pd.DataFrame):
     feat_ids = feat.index.values
     TE_data_ids = TE_data["ensembl_tx_id"].values
     matched_id = list(set(feat_ids) & set(TE_data_ids))
@@ -78,7 +74,7 @@ def match(feat: pd.DataFrame, TE_data: pd.DataFrame) -> pd.DataFrame:
     return feat
 
 
-def data_preparation(opt: argparse.Namespace) -> pd.DataFrame:
+def data_preparation(opt: argparse.Namespace):
     TE_data = pd.read_table(opt.te_df, sep=" ")
     TE_data = TE_data[TE_data.isnull().sum(axis=1) == 0]
     TE_data = TE_data[
@@ -91,19 +87,6 @@ def data_preparation(opt: argparse.Namespace) -> pd.DataFrame:
 
     feat_te = match(feature_mat, TE_data)
     return feat_te
-
-
-def feat_importance(df: pd.DataFrame, model) -> pd.DataFrame:
-    cols = list(df.drop("te", axis=1).columns)  # 特徴量名のリスト(目的変数CRIM以外)
-    # 特徴量重要度の算出方法 'gain'(推奨) : トレーニングデータの損失の減少量を評価
-    f_importance = np.array(
-        model.feature_importance(importance_type="gain")
-    )  # 特徴量重要度の算出 //
-    f_importance = f_importance / np.sum(f_importance)  # 正規化(必要ない場合はコメントアウト)
-    df_importance = pd.DataFrame({"feature": cols, "importance": f_importance})
-    df_importance = df_importance.sort_values("importance", ascending=False)  # 降順ソート
-
-    return df_importance
 
 
 def main(opt, logger):
@@ -139,13 +122,6 @@ def main(opt, logger):
                 f.write(f"{k}:{v:.4f}\n")
         logger.debug(f"Elapsed time:{(time.time()-t1):.3f} s")
 
-        if opt.importance:
-            imp_df = feat_importance(df=data, model=model)
-            imp_df.to_csv(
-                os.path.join(opt.save_dir, opt.res_file + "_importance.csv"),
-                index=False,
-            )
-
     else:
         logger.debug(f"Iterate for {opt.cv} times")
         score_dict = {}
@@ -157,18 +133,32 @@ def main(opt, logger):
                     test_size=opt.test_size,
                     random_state=i,
                 )
-
-                if opt.model == "rf":
-                    model = RandomForestRegressor()
-                    logger.debug("model: RandomForest")
-                elif opt.model == "lgb":
-                    logger.debug("model: LightGBM")
-                    model = lgb.LGBMRegressor()
-                else:
-                    raise NameError()
+                """
+                X_train, X_val, y_train, y_val = train_test_split(
+                    X_train_raw, y_train_raw, test_size=0.2
+                )
+                """
+                params = {
+                    "objective": "regression",  # 最小化させるべき損失関数
+                    "random_state": 42,  # 乱数シード
+                    "boosting_type": "gbdt",  # boosting_type
+                    "n_estimators": 10000,  # 最大学習サイクル数。early_stopping使用時は大きな値を入力
+                }
+                verbose_eval = 0
+                logger.debug("model: LightGBM")
+                model = lgb.LGBMRegressor()
 
                 logger.debug(f"[{i+1}/{opt.cv}]:Model fitting... ")
-                model.fit(X_train, y_train)
+                model.fit(
+                    X_train,
+                    y_train,
+                    eval_metric="rmse",
+                    eval_set=[(X_test, y_test)],
+                    callbacks=[
+                        lgb.early_stopping(stopping_rounds=10, verbose=True),
+                        lgb.log_evaluation(verbose_eval),
+                    ],
+                )
                 logger.debug(f"[{i+1}/{opt.cv}]:Predicting...")
                 preds = model.predict(X_test)
                 logger.debug(
