@@ -9,8 +9,12 @@ from Bio.Seq import Seq
 
 ##seq is seq object from bio.python
 class Seq2Feature:
-    def __init__(self, cds_length):
-        self.cds_length = cds_length  ##assumption last portion of sequence is cds
+    def __init__(self, head_cds_len: int, tail_cds_len: int):
+        self.head_cds_length = (
+            head_cds_len  ##assumption last portion of sequence is cds
+        )
+        self.tail_cds_length = tail_cds_len
+        # self.three = three  # Whether including three prime utr. Bool
 
     def codonFreq(self, seq):
         codon_str = seq.translate()
@@ -25,7 +29,7 @@ class Seq2Feature:
         feature_map["uORF"] = codon_str.count("*")  # number of stop codon
         return feature_map
 
-    def singleNucleotide_composition(self, seq):
+    def singleNucleotide_composition(self, seq, three=False):
         dna_str = str(seq).upper()
         N_count = dict()  # add one pseudo count
         N_count["C"] = 1
@@ -40,7 +44,11 @@ class Seq2Feature:
         feature_map["CGperc"] = float(N_count["C"] + N_count["G"]) / len(dna_str)
         feature_map["CGratio"] = abs(float(N_count["C"]) / N_count["G"] - 1)
         feature_map["ATratio"] = abs(float(N_count["A"]) / N_count["T"] - 1)
-        feature_map["utrlen_m80"] = abs(len(dna_str) - 80 - self.cds_length)
+        if three == True:
+            feature_map["utrlen_m80"] = abs(len(dna_str) - 80 - self.tail_cds_length)
+        else:
+            feature_map["utrlen_m80"] = abs(len(dna_str) - 80 - self.head_cds_length)
+
         return feature_map
 
     def RNAfold_energy(self, sequence, *args):
@@ -84,8 +92,25 @@ class Seq2Feature:
             dna_str[(len(dna_str) - 30) : len(dna_str)]
         )
         feature_map["energy_Gquad_5utr"] = self.RNAfold_energy_Gquad(
-            dna_str[: (len(dna_str) - self.cds_length)]
+            dna_str[: (len(dna_str) - self.head_cds_length)]
         )
+        feature_map["energy_Gquad_5cap"] = self.RNAfold_energy_Gquad(dna_str[:50])
+        feature_map["energy_Gquad_last50bp"] = self.RNAfold_energy_Gquad(
+            dna_str[(len(dna_str) - 50) : len(dna_str)]
+        )
+        return feature_map
+
+    def foldenergy_feature_3utr(self, seq) -> dict:
+        dna_str = str(seq)
+        feature_map = dict()
+        feature_map["energy_5cap"] = self.RNAfold_energy(dna_str[:100])
+        feature_map["energy_whole"] = self.RNAfold_energy(dna_str)
+        feature_map["energy_last30bp"] = self.RNAfold_energy(
+            dna_str[(len(dna_str) - 30) : len(dna_str)]
+        )
+        feature_map["energy_Gquad_3utr"] = self.RNAfold_energy_Gquad(
+            dna_str[self.tail_cds_length :]
+        )  # only for 3utr seq
         feature_map["energy_Gquad_5cap"] = self.RNAfold_energy_Gquad(dna_str[:50])
         feature_map["energy_Gquad_last50bp"] = self.RNAfold_energy_Gquad(
             dna_str[(len(dna_str) - 50) : len(dna_str)]
@@ -118,13 +143,20 @@ class Seq2Feature:
 
         return ret
 
-    def run_with_energy(self, seq):
+    def run_with_energy(self, seq, three):
         print(f"Features with Energy")
         ##codon
         ret = list(self.codonFreq(seq).items())
         ##DNA CG composition
-        ret += list(self.singleNucleotide_composition(seq).items())
+        ret += list(self.singleNucleotide_composition(seq, three).items())
         ##RNA folding
-        ret += list(self.foldenergy_feature(seq).items())
+        if three == True:
+            ret += list(self.foldenergy_feature_3utr(seq).items())
+        else:
+            ret += list(self.foldenergy_feature(seq).items())
+        ##Kmer features
         ret += list(self.Kmer_feature(seq).items())
         return ret
+
+    def run_with_energy_wrapper(self, args):
+        return self.run_with_energy(*args)

@@ -93,12 +93,14 @@ def data_preparation(opt: argparse.Namespace) -> pd.DataFrame:
     return feat_te
 
 
-def feat_importance(df: pd.DataFrame, model) -> pd.DataFrame:
-    cols = list(df.drop("te", axis=1).columns)  # 特徴量名のリスト(目的変数CRIM以外)
+def feat_importance(opt: argparse.Namespace, df: pd.DataFrame, model) -> pd.DataFrame:
+    cols = (
+        pd.read_table(opt.feature.replace("_final.csv", ".colname"), header=None)
+        .iloc[:, 1]
+        .values
+    )
     # 特徴量重要度の算出方法 'gain'(推奨) : トレーニングデータの損失の減少量を評価
-    f_importance = np.array(
-        model.feature_importance(importance_type="gain")
-    )  # 特徴量重要度の算出 //
+    f_importance = np.array(model.feature_importances_)  # 特徴量重要度の算出 //
     f_importance = f_importance / np.sum(f_importance)  # 正規化(必要ない場合はコメントアウト)
     df_importance = pd.DataFrame({"feature": cols, "importance": f_importance})
     df_importance = df_importance.sort_values("importance", ascending=False)  # 降順ソート
@@ -121,7 +123,7 @@ def main(opt, logger):
         if opt.model == "rf":
             model = RandomForestRegressor()
         elif opt.model == "lgb":
-            model = lgb.LGBMRegressor()
+            model = lgb.LGBMRegressor(importance_type="gain")
         else:
             raise NameError()
 
@@ -140,7 +142,7 @@ def main(opt, logger):
         logger.debug(f"Elapsed time:{(time.time()-t1):.3f} s")
 
         if opt.importance:
-            imp_df = feat_importance(df=data, model=model)
+            imp_df = feat_importance(opt, df=data, model=model)
             imp_df.to_csv(
                 os.path.join(opt.save_dir, opt.res_file + "_importance.csv"),
                 index=False,
