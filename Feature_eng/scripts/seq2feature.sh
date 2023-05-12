@@ -1,7 +1,9 @@
-OUTPUT_NAME=Fiveprime_only_restricted
+OUTPUT_NAME=my_gencode_db_utr5_only
 
-python seq2feature.py --df_path /home/ksuga/UTRBERT/data/ensembl_data/fiveprime_only_restricted_db.csv \
+python seq2feature.py --df_path /home/ksuga/UTRBERT/data/gencode_v17_utr5_only.csv \
 					  --out_dir /home/ksuga/UTRBERT/Feature_eng/data/${OUTPUT_NAME} \
+					  --head_cds_len 15 \
+					  --energy \
 					  --save ${OUTPUT_NAME} \
 
 
