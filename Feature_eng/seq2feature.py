@@ -14,8 +14,10 @@ def _argparse():
     args.add_argument("--df_path")
     args.add_argument("--out_dir")
     args.add_argument("--save")
-    args.add_argument("--cds_len", type=int, default=0)
+    args.add_argument("--head_cds_len", type=int, default=0)  # add to 5'utr seq
+    args.add_argument("--tail_cds_len", type=int, default=0)  # add to 3'utr seq
     args.add_argument("--energy", action="store_true")
+    args.add_argument("--threeprime", action="store_true")
     opt = args.parse_args()
     return opt
 
@@ -41,29 +43,42 @@ def single_test():
     print(" ".join(map(str, FeatureVec)))
 
 
-def build_seq_list(opt, cds_length=0):
+def build_seq_list(opt, head_cds_length=0, tail_cds_length=0):
     df = pd.read_csv(opt.df_path, index_col=0)  # index = tx_id
     tx_ids = df["trans_id"].values
     # tx_ids = df.index.values
-
-    if cds_length == 0:
-        seqs = df["fiveprime"].values
+    # fiveprime part
+    if head_cds_length == 0:
+        five_seqs = df["fiveprime"].values
     else:
-        seqs = []
+        five_seqs = []
         for five, cds in zip(df["fiveprime"], df["cds"]):
-            seq = five + cds[:cds_length]
-            seqs.append(seq)
+            seq = five + cds[:head_cds_length]
+            five_seqs.append(seq)
 
-    bio_seqs = list(map(Seq, seqs))
+    # threeprime part
+    if opt.threeprime:
+        if tail_cds_length == 0:
+            three_seqs = df["threeprime"].values
+        else:
+            three_seqs = []
+            for three, cds in zip(df["threeprime"], df["cds"]):
+                seq = cds[-tail_cds_length:] + three
+                three_seqs.append(seq)
 
-    return tx_ids, bio_seqs
-    return tx_ids, bio_seqs
+        bio_seqs_five = list(map(Seq, five_seqs))
+        bio_seqs_three = list(map(Seq, three_seqs))
+        return tx_ids, bio_seqs_five, bio_seqs_three
+
+    else:
+        bio_seqs = list(map(Seq, five_seqs))
+        return tx_ids, bio_seqs
 
 
 def multi(opt):
-    cds_length = opt.cds_len
-    txIDlist, seq_list = build_seq_list(opt, cds_length)
-    print(txIDlist)
+    head_cds_length = opt.head_cds_length
+    tail_cds_length = opt.tail_cds_length
+    txIDlist, seq_list = build_seq_list(opt, head_cds_length, tail_cds_length)
 
     outputFasta = os.path.join(opt.out_dir, "input_sequence.fa")
     outf = open(outputFasta, "w")
@@ -71,7 +86,7 @@ def multi(opt):
         outf.write(">" + tx_id + "\n")
         outf.write(str(seq) + "\n")
 
-    converter = Seq2Feature(cds_length)
+    converter = Seq2Feature(head_cds_length, tail_cds_length)
     pool = Pool(cpu_count())
     if opt.energy == True:
         featList = pool.map(converter.run_with_energy, seq_list)
@@ -113,7 +128,74 @@ def multi(opt):
     outf4.close()
 
 
+def multi_three(opt):
+    head_cds_length = opt.head_cds_len
+    tail_cds_length = opt.tail_cds_len
+    txIDlist, five_seq_list, three_seq_list = build_seq_list(
+        opt, head_cds_length, tail_cds_length
+    )
+    seq_dict = {"5utr": five_seq_list, "3utr": three_seq_list}
+    for prefix, seq_list in seq_dict.items():
+        f_name = prefix + "_input_sequence.fa"
+        outputFasta = os.path.join(opt.out_dir, f_name)
+        outf = open(outputFasta, "w")
+        for tx_id, seq in zip(txIDlist, seq_list):
+            outf.write(">" + tx_id + "\n")
+            outf.write(str(seq) + "\n")
+
+    converter = Seq2Feature(head_cds_length, tail_cds_length)
+    pool = Pool(cpu_count())
+    if opt.energy == True:
+        five_params = [(five_seq, False) for five_seq in five_seq_list]
+        three_params = [(three_seq, True) for three_seq in five_seq_list]
+        five_featList = pool.map(converter.run_with_energy_wrapper, five_params)
+        three_featList = pool.map(converter.run_with_energy_wrapper, three_params)
+    else:
+        five_featList = pool.map(converter.run, five_seq_list)
+        three_featList = pool.map(converter.run, three_seq_list)
+
+    ####### Outputs
+
+    outf2 = gzip.open(os.path.join(opt.out_dir, f"{opt.save}.txt.gz"), "wt")
+    feat2ID = dict()
+    featid = -1
+    feat_dict = {"5utr": five_featList, "3utr": three_featList}
+
+    for prefix, featList in feat_dict.items():
+        for i in range(len(txIDlist)):
+            for featItem in featList[i]:
+                featname = prefix + "_" + featItem[0]
+                featVal = featItem[1]
+                if featname not in feat2ID:
+                    featid += 1
+                    feat2ID[featname] = featid
+                    fid = featid
+                else:
+                    fid = feat2ID[featname]
+                outstr = str(i) + "\t" + str(fid) + "\t" + str(featVal)
+                outf2.write(outstr + "\n")
+
+    outf2.close()
+
+    outf3 = open(os.path.join(opt.out_dir, f"{opt.save}.rowname"), "w")
+    for i in range(len(txIDlist)):
+        outf3.write(str(i) + "\t" + txIDlist[i] + "\n")
+
+    outf3.close()
+
+    outf4 = open(os.path.join(opt.out_dir, f"{opt.save}.colname"), "w")
+    sorted_items = sorted(feat2ID.items(), key=lambda x: x[1])
+    for a in sorted_items:
+        featname = a[0]
+        fid = a[1]
+        outf4.write(str(fid) + "\t" + featname + "\n")
+    outf4.close()
+
+
 if __name__ == "__main__":
     opt = _argparse()
     os.makedirs(opt.out_dir, exist_ok=True)
-    multi(opt)
+    if opt.threeprime:
+        multi_three(opt)
+    else:
+        multi(opt)

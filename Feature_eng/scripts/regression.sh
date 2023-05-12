@@ -1,9 +1,10 @@
-FEATURE_NAME=Fiveprime_only_restricted
+FEATURE_NAME=my_gencode_db_utr5_only
 FEATURE_PATH=./data/${FEATURE_NAME}/${FEATURE_NAME}_final.csv
+MODEL=lgb
 
-python Regression.py --te_df /home/ksuga/UTRBERT/data/df_counts_and_len.TE_sorted.HEK_Andrev2015.with_annot.txt \
+python Regression.py --te_df /home/ksuga/UTRBERT/data/df_counts_and_len.TE_sorted.pc3.with_annot.txt \
 					   --feature ${FEATURE_PATH} \
 					   --save_dir ./data/${FEATURE_NAME} \
-					   --model lgb \
+					   --model ${MODEL}\
 					   --cv 5 \
-					   --res_file results_lgb_5fold
+					   --res_file pc3_${MODEL}_cv5
