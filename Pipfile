@@ -10,6 +10,12 @@ lightgbm = "*"
 pandas = "*"
 tqdm = "*"
 matplotlib = "*"
+jupyterlab = "*"
+mygene = "*"
+hydra = "*"
+omegaconf = "*"
+wandb = "*"
+hydra-core = "*"
 
 [dev-packages]
 

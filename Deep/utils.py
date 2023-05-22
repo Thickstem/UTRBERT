@@ -1,5 +1,12 @@
 import numpy as np
+import itertools
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
+from Bio import SeqIO
+import Bio.SeqUtils.CodonUsage
+import subprocess
+from multiprocessing import Pool
+import gzip
+from Bio.Seq import Seq
 
 
 def metrics(preds: np.ndarray, labels: np.ndarray):
@@ -29,6 +36,37 @@ def onehot_encode(seq):
         onehot_seq.append(onehot)
 
     return np.array(onehot_seq).T
+
+
+class Kmer_count:
+    def __init__(self, ks=[3], base_type="dna"):
+        if base_type == "dna":
+            base = ["A", "T", "G", "C"]
+        elif base_type == "rna":
+            base = ["A", "U", "G", "C"]
+        else:
+            raise TypeError
+
+        self.kmer_dict = {}
+        for k in ks:
+            kmers = list(itertools.product(base, repeat=k))
+            for kmer in kmers:
+                str_kmer = "".join(b for b in kmer)
+                self.kmer_dict[str_kmer] = 0
+
+    def calc(self, seq, k=3, freq=True):
+        count = 0
+        tmp_dict = self.kmer_dict.copy()
+        for st in range(len(seq) - k):
+            kmer = seq[st : (st + k)]
+            tmp_dict[kmer] += 1
+            count += 1
+
+        if freq:
+            prob = np.array(list(tmp_dict.values())) / count
+            return list(prob)
+        else:
+            return count
 
 
 class Seq_n_padding:

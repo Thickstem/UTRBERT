@@ -1,29 +1,18 @@
+from tqdm import tqdm
 import hydra
-import argparse
-import warnings
-import random
-import logging
-import os
-import math
-import pickle
-from pathlib import Path
-import sys
 import numpy as np
 import pandas as pd
-from typing import Tuple, Union
-import yaml
-import wandb
 
 from utils import Kmer_count
 
-from omegaconf import OmegaConf, DictConfig
+from omegaconf import DictConfig
 
 
 def match(cfg: DictConfig, seq_df: pd.DataFrame, te_df: pd.DataFrame) -> pd.DataFrame:
     te_df = te_df[te_df.isnull().sum(axis=1) == 0]
     te_df = te_df[
-        (te_df["rpkm_riboseq"] > cfg["riboseq_thresh"])
-        & (te_df["rpkm_rnaseq"] > cfg["rnaseq_thresh"])
+        (te_df["rpkm_riboseq"] > cfg.riboseq_thresh)
+        & (te_df["rpkm_rnaseq"] > cfg.rnaseq_thresh)
     ]
 
     seq_ids = seq_df.index.values
@@ -79,23 +68,29 @@ def build_seq_df(
 
     id_list = []
     seq_list = []
-    for id, seq in zip(seq_df["trans_id"], seqs):
+    for id, seq in tqdm(zip(seq_df["trans_id"], seqs)):
         if (len(seq) >= min_seq_len) & (len(seq) <= max_seq_len):
             kmer_prob = kmer_counter.calc(seq)
-            pad_seq = simple_padding(seq)
+            pad_seq = simple_padding(seq, max_seq_len)
             id_list.append(id)
-            seq_feature = [pad_seq].extend(kmer_prob)
+            seq_feature = [pad_seq]
+            seq_feature.extend(kmer_prob)
             seq_list.append(seq_feature)
-
-    col_names = ["seq"].extend(kmer_counter.kmer_dict.keys())
+    col_names = ["seq"]
+    col_names.extend(kmer_counter.kmer_dict.keys())
     built_df = pd.DataFrame(seq_list, index=id_list, columns=col_names)
     return built_df
 
 
 @hydra.main(config_path="/home/ksuga/UTRBERT/Deep/configs", config_name="cnn_data")
 def main(cfg: DictConfig) -> None:
-    seq_df = cfg["seq_df_path"]
-    te_df = cfg["te_df_path"]
+    seq_df = pd.read_csv(cfg.seq_df_path, index_col=0)
+    te_df = pd.read_table(cfg.te_df_path, sep=" ")
+
+    built_df = build_seq_df(seq_df)
+    matched_df = match(cfg, built_df, te_df)
+
+    matched_df.to_csv(cfg.output)
 
 
 if __name__ == "__main__":
