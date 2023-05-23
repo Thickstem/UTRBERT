@@ -2,6 +2,7 @@ import os
 import json
 import copy
 from logging import getLogger
+from typing import List, Union
 from tqdm import tqdm
 import numpy as np
 from sklearn.preprocessing import StandardScaler
@@ -185,3 +186,40 @@ class UTRDataset_CNN(Dataset):
 
     def __len__(self):
         return self.data.shape[0]
+
+
+class UTRDataset_CNN_concat(Dataset):
+    def __init__(
+        self, seq_data: List, feat_data: np.array, label: np.array, phase: str
+    ):
+        """Dataset class for CNN_concat project
+
+        Args:
+            seq_data (List): sequence:List[str],already padding
+            feat_data (np.array): numerical features,(Kmer freq)
+            label (np.array): TE value. already log converted
+            phase (str): "train" or "val"
+        """
+        super().__init__()
+        self.seq_data = seq_data  # sequence:str (already pad)
+        self.feat_data = feat_data  # numerical features (Kmer freq)
+        self.label = label  # TE val (already log converted)
+
+        if phase == "train":
+            self.scaler = StandardScaler().fit(self.label.reshape(-1, 1))
+            self.label = self.scaler.transform(self.label.reshape(-1, 1))
+
+        self.label = torch.tensor(self.label, dtype=torch.float)
+
+    def __getitem__(self, index):
+        seq = self.seq_data[index]  # single sample
+        onehot_seq = onehot_encode(seq)  # dim(seq_len,4)
+
+        feat = self.feat_data[index]  # numerical feature data
+        return (
+            torch.tensor(onehot_seq, dtype=torch.float),
+            torch.tensor(feat, dtype=torch.float),
+        ), self.label[index]
+
+    def __len__(self):
+        return self.seq_data.shape[0]
