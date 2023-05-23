@@ -188,10 +188,8 @@ class UTRDataset_CNN(Dataset):
         return self.data.shape[0]
 
 
-class UTRDataset_CNN_concat(Dataset):
-    def __init__(
-        self, seq_data: List, feat_data: np.array, label: np.array, phase: str
-    ):
+class UTRDataset_CNN_CONCAT(Dataset):
+    def __init__(self, seq_data: List, feat_data: np.array, label: np.array):
         """Dataset class for CNN_concat project
 
         Args:
@@ -204,10 +202,6 @@ class UTRDataset_CNN_concat(Dataset):
         self.seq_data = seq_data  # sequence:str (already pad)
         self.feat_data = feat_data  # numerical features (Kmer freq)
         self.label = label  # TE val (already log converted)
-
-        if phase == "train":
-            self.scaler = StandardScaler().fit(self.label.reshape(-1, 1))
-            self.label = self.scaler.transform(self.label.reshape(-1, 1))
 
         self.label = torch.tensor(self.label, dtype=torch.float)
 

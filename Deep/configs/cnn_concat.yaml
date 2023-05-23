@@ -1,3 +1,11 @@
+project_name: UTR_optimizer
+exp_name: test
+wandb_mode: online
+timestamp: ${now:%Y-%m-%d_%H-%M-%S}
+log_dir: hydra_log/${exp_name}
+seed: 2023
+gpus: [0,1]
+
 data:
   seq_df_path: /home/ksuga/UTRBERT/data/ensembl_data/fiveprime_upper30_db.csv
   te_df_path: /home/ksuga/UTRBERT/data/TE/df_counts_and_len.TE_sorted.HEK_Andrev2015.with_annot.txt
@@ -7,6 +15,32 @@ data:
   riboseq_thresh: 0.1
   rnaseq_thresh: 5
 
+## CNN_concat trainer params
 train:
+  data_path: /home/ksuga/UTRBERT/data/deep/cnn_hek_fiveonly.csv
+  train_bs: 32
+  val_bs: 32
+  lr: 1e-3
+  epoch: 300
+  scheduler_step: 100
+  val_epoch: 5
+  grac_acc: 1
 
+## CNN model Params
 model:
+  max_len: 500
+  feat_dim: 66 # GCperc,length,64 codon freq
+  conv1_ch: 120
+  conv2_ch: 32
+  conv3_ch: 64
+  stride1: 2
+  stride2: 1
+  stride3: 1
+  dilation1: 1
+  dilation2: 1
+  dilation3: 1
+  conv1_kernel: 10
+  conv2_kernel: 10
+  conv3_kernel: 10
+  linear1_dim : 128
+  linear2_dim : 32

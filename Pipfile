@@ -16,6 +16,10 @@ hydra = "*"
 omegaconf = "*"
 wandb = "*"
 hydra-core = "*"
+torch = "*"
+torchvision = "*"
+torchaudio = "*"
+torchinfo = "*"
 
 [dev-packages]
 

@@ -7,4 +7,4 @@ python Regression.py --te_df /home/ksuga/UTRBERT/data/df_counts_and_len.TE_sorte
 					   --save_dir ./data/${FEATURE_NAME} \
 					   --model ${MODEL}\
 					   --cv 5 \
-					   --res_file pc3_${MODEL}_cv5
+					   --res_file test
