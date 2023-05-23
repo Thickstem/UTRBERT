@@ -1,9 +1,10 @@
+from typing import List
 from tqdm import tqdm
 import hydra
 import numpy as np
 import pandas as pd
 
-from utils import Kmer_count
+from utils import Kmer_count, GCperc
 
 from omegaconf import DictConfig
 
@@ -42,10 +43,28 @@ def simple_padding(seq: str, max_seq_len: int) -> str:
     return pad_seq
 
 
+def create_feat(seq: str, kmer_counter) -> List[float]:
+    """create numerical feature list. GC perc,Length,Kmer freq.
+    Args:
+        seq (str):
+        kmer_counter (class): Kmer counter class
+
+    Returns:
+        List[float]: one feature list
+    """
+    kmer_prob = kmer_counter.calc(seq)
+    gc_perc = GCperc(seq)
+    length = len(seq)
+
+    feat_list = [gc_perc, length]
+    feat_list.extend(kmer_prob)
+    return feat_list
+
+
 def build_seq_df(
     seq_df: pd.DataFrame, cds_length=0, min_seq_len=30, max_seq_len=500
 ) -> pd.DataFrame:
-    """building DF. concating,thresholding,Kmer_counting,padding sequences
+    """building DF. concating,thresholding,numeric_feat,padding sequences
 
     Args:
         seq_df (pd.DataFrame): raw sequence dataframe
@@ -70,20 +89,22 @@ def build_seq_df(
     seq_list = []
     for id, seq in tqdm(zip(seq_df["trans_id"], seqs)):
         if (len(seq) >= min_seq_len) & (len(seq) <= max_seq_len):
-            kmer_prob = kmer_counter.calc(seq)
-            pad_seq = simple_padding(seq, max_seq_len)
             id_list.append(id)
+            pad_seq = simple_padding(seq, max_seq_len)
+            feat_list = create_feat(seq, kmer_counter)
+
             seq_feature = [pad_seq]
-            seq_feature.extend(kmer_prob)
+            seq_feature.extend(feat_list)
             seq_list.append(seq_feature)
-    col_names = ["seq"]
+    col_names = ["seq", "GC_perc", "UTR5_len"]
     col_names.extend(kmer_counter.kmer_dict.keys())
     built_df = pd.DataFrame(seq_list, index=id_list, columns=col_names)
     return built_df
 
 
-@hydra.main(config_path="/home/ksuga/UTRBERT/Deep/configs", config_name="cnn_data")
+@hydra.main(config_path="/home/ksuga/UTRBERT/Deep/configs", config_name="cnn_concat")
 def main(cfg: DictConfig) -> None:
+    cfg = cfg.data
     seq_df = pd.read_csv(cfg.seq_df_path, index_col=0)
     te_df = pd.read_table(cfg.te_df_path, sep=" ")
 

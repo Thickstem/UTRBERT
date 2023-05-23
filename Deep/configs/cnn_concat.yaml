@@ -1,0 +1,12 @@
+data:
+  seq_df_path: /home/ksuga/UTRBERT/data/ensembl_data/fiveprime_upper30_db.csv
+  te_df_path: /home/ksuga/UTRBERT/data/TE/df_counts_and_len.TE_sorted.HEK_Andrev2015.with_annot.txt
+
+  output: /home/ksuga/UTRBERT/data/deep/cnn_hek_fiveonly.csv
+
+  riboseq_thresh: 0.1
+  rnaseq_thresh: 5
+
+train:
+
+model:

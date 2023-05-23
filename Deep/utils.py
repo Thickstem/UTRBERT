@@ -38,6 +38,21 @@ def onehot_encode(seq):
     return np.array(onehot_seq).T
 
 
+def GCperc(seq: str) -> float:
+    """Calculate GC percentage of input seq
+
+    Args:
+        seq (str): sequence
+
+    Returns:
+        float: GC percentage [0,1]
+    """
+    num_G = seq.upper().count("G")
+    num_C = seq.upper().count("C")
+    gc_perc = (num_G + num_C) / len(seq)
+    return gc_perc
+
+
 class Kmer_count:
     def __init__(self, ks=[3], base_type="dna"):
         if base_type == "dna":
